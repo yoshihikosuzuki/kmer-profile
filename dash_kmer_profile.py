@@ -13,7 +13,8 @@ pio.templates.default = 'plotly_white'
 app = dash.Dash(__name__,
                 external_stylesheets=['https://codepen.io/chriddyp/pen/bWLwgP.css'])
 app.layout = html.Div(children=[
-    dcc.Graph(id='kmer-profile-graph'),
+    dcc.Graph(id='kmer-profile-graph',
+              config=dict(toImageButtonOptions=dict(format='svg'))),
     html.Div(["DB file name: ",
               dcc.Input(id='db-fname',
                         value='',
