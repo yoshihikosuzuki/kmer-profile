@@ -98,8 +98,11 @@ def update_count_dist(n_clicks: int,
                                          col="mediumvioletred",
                                          name="DIPLO-REPEAT",
                                          show_legend=True)],
-                     layout=pl.make_layout(x_title="K-mer count",
-                                           y_title="Frequency"))
+                     layout=pl.make_layout(width=800,
+                                           height=400,
+                                           x_title="K-mer count",
+                                           y_title="Frequency",
+                                           margin=dict(l=10, r=10, t=10, b=10)))
 
 
 ### ----------------------------------------------------------------------- ###
@@ -159,15 +162,37 @@ def update_kmer_profile(n_clicks: int,
         bases_shown = False
         if not isinstance(max_count, int):
             max_count = max(counts)
+        # TODO: # FIXME: this is indeed read length - 40
+        read_length = len(counts)
+        threshold_lines = [pl.make_line(0,
+                                        ERROR_HAPLO,
+                                        read_length,
+                                        ERROR_HAPLO,
+                                        col="coral",
+                                        layer="below"),
+                           pl.make_line(0,
+                                        HAPLO_DIPLO,
+                                        read_length,
+                                        HAPLO_DIPLO,
+                                        col="teal",
+                                        layer="below"),
+                           pl.make_line(0,
+                                        DIPLO_REPEAT,
+                                        read_length,
+                                        DIPLO_REPEAT,
+                                        col="mediumvioletred",
+                                        layer="below")]
         return go.Figure(data=pl.make_scatter(x=list(range(len(counts))),
                                               y=counts,
                                               mode="lines",
                                               col="black"),
                          layout=pl.make_layout(x_title="Position",
                                                y_title="Count",
-                                               y_range=(0, max_count)))
+                                               y_range=(0, max_count),
+                                               y_grid=False,
+                                               shapes=threshold_lines))
     elif ctx.triggered[0]["prop_id"] == "kmer-profile-graph.relayoutData":
-        if fig is None:
+        if fig is None or len(fig["data"]) == 0:
             raise PreventUpdate
         xmin, xmax = map(int, fig["layout"]["xaxis"]["range"])
         if xmax - xmin < 300:
@@ -204,26 +229,29 @@ def main():
                   dcc.Input(id='db-fname',
                             value=args.input_db,
                             type='text')]),
-        html.Div(["Max count [for k-mer count distribution]: ",
+        html.Div([html.Button(id='submit-count-freq',
+                              n_clicks=0,
+                              children='Draw k-mer count distribution'),
+                  " [OPTIONS]",
+                  " Max count = ",
                   dcc.Input(id='max-count-dist',
                             value='100',
                             type='number')]),
-        html.Button(id='submit-count-freq',
-                    n_clicks=0,
-                    children='Draw k-mer count distribution'),
         dcc.Graph(id='kmer-count-dist',
                   config=dict(toImageButtonOptions=dict(format=args.download_as))),
         html.Div(["Read ID: ",
                   dcc.Input(id='read-id',
                             value='',
                             type='number')]),
-        html.Div(["Max count [for k-mer count profile]: ",
+        html.Div([html.Button(id='submit-kmer-profile',
+                              n_clicks=0,
+                              children='Draw k-mer profile'),
+                  " [OPTIONS]",
+                  " Max count = ",
                   dcc.Input(id='max-count-profile',
                             value='',
                             type='number')]),
-        html.Button(id='submit-kmer-profile',
-                    n_clicks=0,
-                    children='Draw k-mer profile'),
+
         dcc.Graph(id='kmer-profile-graph',
                   config=dict(toImageButtonOptions=dict(format=args.download_as)))
     ])
