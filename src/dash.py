@@ -1,4 +1,3 @@
-from logging import ERROR
 import os
 import argparse
 from collections import Counter
@@ -59,50 +58,77 @@ def load_count_dist(db_fname: str,
     return count_freqs
 
 
+# Global cache for global k-mer count frequencies
+global_dist_trace = None
+
+
 @app.callback(
     Output('kmer-count-dist', 'figure'),
-    [Input('submit-count-freq', 'n_clicks')],
+    [Input('submit-count-freq', 'n_clicks'),
+     Input('submit-kmer-profile', 'n_clicks')],
     [State('db-fname', 'value'),
-     State('max-count-dist', 'value')]
+     State('read-id', 'value'),
+     State('max-count-dist', 'value'),
+     State('kmer-count-dist', 'figure')]
 )
-def update_count_dist(n_clicks: int,
+def update_count_dist(n_clicks_dist: int,
+                      n_clicks_profile: int,
                       db_fname: str,
-                      max_count: int) -> go.Figure:
+                      read_id: int,
+                      max_count: int,
+                      fig: go.Figure) -> go.Figure:
     """Update the count distribution."""
+    global global_dist_trace
+    ctx = dash.callback_context
     max_count = int(max_count)
-    count_freqs = load_count_dist(db_fname, max_count)
-    return go.Figure(data=[pl.make_hist(count_freqs,
-                                        bin_size=1,
-                                        col="grey"),
-                           pl.make_lines([(ERROR_HAPLO,
-                                           0,
-                                           ERROR_HAPLO,
-                                           max(count_freqs.values()))],
-                                         width=3,
-                                         col="coral",
-                                         name="ERROR-HAPLO",
-                                         show_legend=True),
-                           pl.make_lines([(HAPLO_DIPLO,
-                                           0,
-                                           HAPLO_DIPLO,
-                                           max(count_freqs.values()))],
-                                         width=3,
-                                         col="teal",
-                                         name="HAPLO-DIPLO",
-                                         show_legend=True),
-                           pl.make_lines([(DIPLO_REPEAT,
-                                           0,
-                                           DIPLO_REPEAT,
-                                           max(count_freqs.values()))],
-                                         width=3,
-                                         col="mediumvioletred",
-                                         name="DIPLO-REPEAT",
-                                         show_legend=True)],
-                     layout=pl.make_layout(width=800,
-                                           height=400,
-                                           x_title="K-mer count",
-                                           y_title="Frequency",
-                                           margin=dict(l=10, r=10, t=10, b=10)))
+    if (not ctx.triggered
+            or ctx.triggered[0]["prop_id"] == "submit-count_freq.n_clicks"):
+        count_freqs = load_count_dist(db_fname, max_count)
+        tot_freq = sum(list(count_freqs.values()))
+        count_freqs = {k: v / tot_freq * 100 for k, v in count_freqs.items()}
+        global_dist_trace = pl.make_hist(count_freqs,
+                                         bin_size=1,
+                                         col="grey",
+                                         name="All k-mers",
+                                         show_legend=True)
+        threshold_lines = [pl.make_line(ERROR_HAPLO, 0, ERROR_HAPLO, 1,
+                                        yref="paper",
+                                        width=3,
+                                        col="coral",
+                                        layer="above"),
+                           pl.make_line(HAPLO_DIPLO, 0, HAPLO_DIPLO, 1,
+                                        yref="paper",
+                                        width=3,
+                                        col="teal",
+                                        layer="above"),
+                           pl.make_line(DIPLO_REPEAT, 0, DIPLO_REPEAT, 1,
+                                        yref="paper",
+                                        width=3,
+                                        col="mediumvioletred",
+                                        layer="above")]
+        layout = pl.make_layout(width=800,
+                                height=400,
+                                x_title="K-mer count",
+                                y_title="Relative frequency [%]",
+                                shapes=threshold_lines)
+        layout["barmode"] = "overlay"
+        return go.Figure(data=global_dist_trace,
+                         layout=layout)
+    elif ctx.triggered[0]["prop_id"] == "submit-kmer-profile.n_clicks":
+        read_id = int(read_id)
+        # TODO: reuse loaded data for profile?
+        _, counts = load_kmer_profile(db_fname, read_id)
+        count_freqs = Counter([min(count, max_count) for count in counts])
+        tot_freq = sum(list(count_freqs.values()))
+        count_freqs = {k: v / tot_freq * 100 for k, v in count_freqs.items()}
+        return go.Figure(data=[global_dist_trace,
+                               pl.make_hist(count_freqs,
+                                            bin_size=1,
+                                            col="blue",
+                                            opacity=0.4,
+                                            name=f"Read {read_id}",
+                                            show_legend=True)],
+                         layout=fig["layout"])
 
 
 ### ----------------------------------------------------------------------- ###
@@ -111,20 +137,26 @@ def update_count_dist(n_clicks: int,
 
 
 def load_kmer_profile(db_fname: str,
-                      read_id: int) -> List[Tuple[int, str, int]]:
+                      read_id: int) -> Tuple[List[str], List[int]]:
     """Load k-mer count profile of a single read."""
-    bases, counts = [], []
     if not os.path.exists(db_fname):
-        return counts
+        return [], []
     command = f"KMlook {db_fname} {read_id}"
-    for line in run_command(command).strip().split('\n')[3:]:
+    lines = run_command(command).strip().split('\n')
+    assert lines[2].startswith('len'), "Invalid KMlook output"
+    read_length = int(lines[2].strip().split()[2])
+    bases, counts = [''] * read_length, [0] * read_length
+    for line in lines[3:]:
         data = line.strip().split()
-        if len(data) != 4:
-            continue
-        pos, base, count, _ = data
-        pos = int(pos[:-1])
-        bases.append(base)
-        counts.append(int(count))
+        if data[0][-1] == ':':
+            if data[-1] == 'Z':
+                pos, base = data[:2]
+                count = 0
+            else:
+                pos, base, count = data[:3]
+            pos = int(pos[:-1])
+            bases[pos] = base
+            counts[pos] = int(count)
     return bases, counts
 
 
@@ -158,28 +190,19 @@ def update_kmer_profile(n_clicks: int,
         # Draw a new plot from scratch
         read_id = int(read_id)
         bases, counts = load_kmer_profile(db_fname, read_id)
-        # TODO: show <40-bp region
         bases_shown = False
         if not isinstance(max_count, int):
             max_count = max(counts)
-        # TODO: # FIXME: this is indeed read length - 40
-        read_length = len(counts)
-        threshold_lines = [pl.make_line(0,
-                                        ERROR_HAPLO,
-                                        read_length,
-                                        ERROR_HAPLO,
+        threshold_lines = [pl.make_line(0, ERROR_HAPLO, 1, ERROR_HAPLO,
+                                        xref="paper",
                                         col="coral",
                                         layer="below"),
-                           pl.make_line(0,
-                                        HAPLO_DIPLO,
-                                        read_length,
-                                        HAPLO_DIPLO,
+                           pl.make_line(0, HAPLO_DIPLO, 1, HAPLO_DIPLO,
+                                        xref="paper",
                                         col="teal",
                                         layer="below"),
-                           pl.make_line(0,
-                                        DIPLO_REPEAT,
-                                        read_length,
-                                        DIPLO_REPEAT,
+                           pl.make_line(0, DIPLO_REPEAT, 1, DIPLO_REPEAT,
+                                        xref="paper",
                                         col="mediumvioletred",
                                         layer="below")]
         return go.Figure(data=pl.make_scatter(x=list(range(len(counts))),
@@ -195,6 +218,8 @@ def update_kmer_profile(n_clicks: int,
         if fig is None or len(fig["data"]) == 0:
             raise PreventUpdate
         xmin, xmax = map(int, fig["layout"]["xaxis"]["range"])
+        xmin = max(0, xmin)
+        xmax = min(len(counts), xmax)
         if xmax - xmin < 300:
             # Show bases if the plotting region is shorter than 300 bp
             bases_shown = True
