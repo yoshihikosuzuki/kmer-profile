@@ -82,13 +82,13 @@ def update_count_dist(n_clicks_dist: int,
     ctx = dash.callback_context
     max_count = int(max_count)
     if (not ctx.triggered
-            or ctx.triggered[0]["prop_id"] == "submit-count_freq.n_clicks"):
+            or ctx.triggered[0]["prop_id"] == "submit-count-freq.n_clicks"):
         count_freqs = load_count_dist(db_fname, max_count)
         tot_freq = sum(list(count_freqs.values()))
         count_freqs = {k: v / tot_freq * 100 for k, v in count_freqs.items()}
         global_dist_trace = pl.make_hist(count_freqs,
                                          bin_size=1,
-                                         col="dimgray",
+                                         col="gray",
                                          name="All k-mers",
                                          show_legend=True)
         threshold_lines = [pl.make_line(ERROR_HAPLO, 0, ERROR_HAPLO, 1,
