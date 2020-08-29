@@ -116,8 +116,9 @@ def update_count_dist(n_clicks_dist: int,
                          layout=layout)
     elif ctx.triggered[0]["prop_id"] == "submit-kmer-profile.n_clicks":
         read_id = int(read_id)
-        # TODO: reuse loaded data for profile?
+        # TODO: reuse count data loaded for profile?
         _, counts = load_kmer_profile(db_fname, read_id)
+        counts = list(filter(lambda x: x > 0, counts))
         count_freqs = Counter([min(count, max_count) for count in counts])
         tot_freq = sum(list(count_freqs.values()))
         count_freqs = {k: v / tot_freq * 100 for k, v in count_freqs.items()}
@@ -149,7 +150,7 @@ def load_kmer_profile(db_fname: str,
     for line in lines[3:]:
         data = line.strip().split()
         if data[0][-1] == ':':
-            if data[-1] == 'Z':
+            if data[2] == 'Z':
                 pos, base = data[:2]
                 count = 0
             else:
