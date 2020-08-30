@@ -93,17 +93,17 @@ def update_count_dist(n_clicks_dist: int,
                                          show_legend=True)
         threshold_lines = [pl.make_line(ERROR_HAPLO, 0, ERROR_HAPLO, 1,
                                         yref="paper",
-                                        width=3,
+                                        width=2,
                                         col="coral",
                                         layer="above"),
                            pl.make_line(HAPLO_DIPLO, 0, HAPLO_DIPLO, 1,
                                         yref="paper",
-                                        width=3,
+                                        width=2,
                                         col="navy",
                                         layer="above"),
                            pl.make_line(DIPLO_REPEAT, 0, DIPLO_REPEAT, 1,
                                         yref="paper",
-                                        width=3,
+                                        width=2,
                                         col="mediumvioletred",
                                         layer="above")]
         layout = pl.make_layout(width=800,
@@ -206,17 +206,21 @@ def update_kmer_profile(n_clicks: int,
                                         xref="paper",
                                         col="mediumvioletred",
                                         layer="below")]
+        layout = pl.make_layout(width=1800,
+                                height=500,
+                                x_title="Position",
+                                y_title="Count",
+                                y_range=(0, max_count),
+                                y_grid=False,
+                                shapes=threshold_lines)
+        layout["barmode"] = "overlay"
         return go.Figure(data=pl.make_scatter(x=list(range(len(counts))),
                                               y=counts,
                                               mode="lines",
-                                              col="black"),
-                         layout=pl.make_layout(width=1600,
-                                               height=400,
-                                               x_title="Position",
-                                               y_title="Count",
-                                               y_range=(0, max_count),
-                                               y_grid=False,
-                                               shapes=threshold_lines))
+                                              col="black",
+                                              name="Depth",
+                                              show_legend=True),
+                         layout=layout)
     elif ctx.triggered[0]["prop_id"] == "kmer-profile-graph.relayoutData":
         if fig is None or len(fig["data"]) == 0:
             raise PreventUpdate
@@ -230,7 +234,15 @@ def update_kmer_profile(n_clicks: int,
                                                     y=counts[xmin:xmax],
                                                     text=bases[xmin:xmax],
                                                     text_pos="top center",
-                                                    mode="text")]
+                                                    mode="text"),
+                                    pl.make_hist({i: max(0, counts[i] - counts[i - 1])
+                                                  for i in range(max(1, xmin), xmax)},
+                                                 bin_size=1,
+                                                 col="red"),
+                                    pl.make_hist({i: max(0, - counts[i] + counts[i - 1])
+                                                  for i in range(max(1, xmin), xmax)},
+                                                 bin_size=1,
+                                                 col="blue")]
                                    + fig["data"]),
                              layout=fig["layout"])
         elif bases_shown:
