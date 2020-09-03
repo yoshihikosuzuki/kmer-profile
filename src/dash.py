@@ -239,7 +239,7 @@ def update_kmer_profile(n_clicks: int,
                                                   for i in range(max(1, xmin), xmax)},
                                                  bin_size=1,
                                                  col="red"),
-                                    pl.make_hist({i: max(0, - counts[i] + counts[i - 1])
+                                    pl.make_hist({i: -max(0, - counts[i] + counts[i - 1])
                                                   for i in range(max(1, xmin), xmax)},
                                                  bin_size=1,
                                                  col="blue")]
@@ -291,7 +291,6 @@ def main():
                   dcc.Input(id='max-count-profile',
                             value='',
                             type='number')]),
-
         dcc.Graph(id='kmer-profile-graph',
                   config=dict(toImageButtonOptions=dict(format=args.download_as)))
     ])
