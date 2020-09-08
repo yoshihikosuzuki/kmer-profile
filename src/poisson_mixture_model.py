@@ -7,7 +7,8 @@ def gibbs_sampling(data: Sequence[int],
                    K: int,
                    gamma_hyperparams: Sequence[Tuple[float, float]],
                    alpha_hyperparams: Sequence[int],
-                   n_max_iter: int) -> List[int]:
+                   n_max_iter: int,
+                   verbose: bool = False) -> List[int]:
     """Perform Gibbs sampling of a Poisson mixture model with K components.
 
     positional arguments:
@@ -48,6 +49,7 @@ def gibbs_sampling(data: Sequence[int],
     assert len(gamma_hyperparams) == len(alpha_hyperparams) == K, \
         "Invalid number of hyperparameters"
     N = len(data)
+    # Start from parameters of components computed from prior knowledge
     lambdas = [a / b for a, b in gamma_hyperparams]
     partitions = [alpha / sum(alpha_hyperparams)
                   for alpha in alpha_hyperparams]
@@ -55,12 +57,13 @@ def gibbs_sampling(data: Sequence[int],
     for t in range(n_max_iter):
         for n in range(N):
             update_assignment(n)
-        # print(f"assignments={assignments}")
         for k in range(K):
             update_lambda(k)
-        print(f"lamdas={lambdas}")
+        if verbose:
+            print(f"lamdas={lambdas}")
         update_partition()
-        print(f"partitions={partitions}")
+        if verbose:
+            print(f"partitions={partitions}")
         # TODO: check if the permutation of clusters increases the likelihood
         #       (when component-specific hyperparameters are specified)
     return np.array(assignments, dtype=np.int64)
@@ -70,7 +73,8 @@ def variational_inference(data: Sequence[int],
                           K: int,
                           gamma_hyperparams: Sequence[Tuple[float, float]],
                           alpha_hyperparams: Sequence[int],
-                          n_max_iter: int) -> List[int]:
+                          n_max_iter: int,
+                          verbose: bool = False) -> List[int]:
     """Perform Gibbs sampling of a Poisson mixture model with K components.
 
     positional arguments:
@@ -116,7 +120,9 @@ def variational_inference(data: Sequence[int],
             update_q_assignment(n)
         for k in range(K):
             update_q_lambda(k)
-        print(f"lambda_abs={list(zip(lambda_as, lambda_bs))}")
+        if verbose:
+            print(f"lambda_abs={list(zip(lambda_as, lambda_bs))}")
         update_q_partition()
-        print(f"partition_alphas={partition_alphas}")
+        if verbose:
+            print(f"partition_alphas={partition_alphas}")
     return np.argmax(assignment_etas, axis=1)
