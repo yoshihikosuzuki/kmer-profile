@@ -8,7 +8,7 @@ def gibbs_sampling(data: Sequence[int],
                    gamma_hyperparams: Sequence[Tuple[float, float]],
                    alpha_hyperparams: Sequence[int],
                    n_max_iter: int,
-                   verbose: bool = False) -> List[int]:
+                   verbose: bool = False) -> Tuple[List[int], List]:
     """Perform Gibbs sampling of a Poisson mixture model with K components.
 
     positional arguments:
@@ -20,7 +20,9 @@ def gibbs_sampling(data: Sequence[int],
                             for each component.
       @ n_max_iter        : Maximum number of iterations.
     """
-    def update_assignment(n: int):
+    def update_assignment(n: int, choose_max: bool = False):
+        """NOTE: Use `choose_max=True` for the final assignment.
+        """
         nonlocal assignments, lambdas, partitions
         etas = [None] * K
         for k in range(K):
@@ -29,7 +31,8 @@ def gibbs_sampling(data: Sequence[int],
                              + np.log(partitions[k]))
         tot = sum(etas)
         etas = [eta / tot for eta in etas]
-        assignments[n] = np.random.choice(K, p=etas)
+        assignments[n] = (np.random.choice(K, p=etas) if not choose_max
+                          else np.argmax(etas))
 
     def update_lambda(k: int):
         nonlocal N, lambdas, assignments
@@ -64,9 +67,12 @@ def gibbs_sampling(data: Sequence[int],
         update_partition()
         if verbose:
             print(f"partitions={partitions}")
-        # TODO: check if the permutation of clusters increases the likelihood
-        #       (when component-specific hyperparameters are specified)
-    return np.array(assignments, dtype=np.int64)
+    # TODO: Store the parameters which result in the maximum posterior probability
+    #       and compute hard assignment for each data using the estimated parameters
+    for n in range(N):
+        update_assignment(n, choose_max=True)
+    return (np.array(assignments, dtype=np.int64),
+            lambdas)
 
 
 def variational_inference(data: Sequence[int],
@@ -74,7 +80,7 @@ def variational_inference(data: Sequence[int],
                           gamma_hyperparams: Sequence[Tuple[float, float]],
                           alpha_hyperparams: Sequence[int],
                           n_max_iter: int,
-                          verbose: bool = False) -> List[int]:
+                          verbose: bool = False) -> Tuple[List[int], List]:
     """Perform Gibbs sampling of a Poisson mixture model with K components.
 
     positional arguments:
@@ -125,4 +131,5 @@ def variational_inference(data: Sequence[int],
         update_q_partition()
         if verbose:
             print(f"partition_alphas={partition_alphas}")
-    return np.argmax(assignment_etas, axis=1)
+    return (np.argmax(assignment_etas, axis=1),
+            [lambda_as[k] / lambda_bs[k] for k in range(K)])
