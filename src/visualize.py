@@ -2,7 +2,6 @@ from typing import Optional, Sequence
 from collections import defaultdict
 import plotly_light as pl
 
-
 STATE_TO_COL = {'E': "red", 'H': "green", 'D': "blue", 'R': "yellow"}
 
 

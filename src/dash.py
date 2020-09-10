@@ -1,9 +1,11 @@
 import os
 import argparse
 from collections import Counter
-from typing import Any, Tuple, List
+from typing import Any, Optional, Tuple, List
+from logzero import logger
 import plotly.io as pio
 import plotly.graph_objects as go
+from plotly.basedatatypes import BaseTraceType
 import plotly_light as pl
 import dash
 import dash_html_components as html
@@ -11,11 +13,29 @@ import dash_core_components as dcc
 from dash.dependencies import Input, Output, State, ALL
 from dash.exceptions import PreventUpdate
 from BITS.util.proc import run_command
-
+from .io import REPkmerResult, CountProfile, load_count_dist, load_kmer_profile
 
 pio.templates.default = 'plotly_white'
 app = dash.Dash(__name__,
                 external_stylesheets=['https://codepen.io/chriddyp/pen/bWLwgP.css'])
+
+### ----------------------------------------------------------------------- ###
+###                     constants and global variables                      ###
+### ----------------------------------------------------------------------- ###
+
+# Colors
+THRESHOLD_COLS = {'error_haplo': "coral",
+                  'haplo_diplo': "navy",
+                  'diplo_repeat': "mediumvioletred"}
+CLASS_COLS = {'E': "red",
+              'H': "green",
+              'D': "blue"}
+
+# Cache for k-mer count frequencies/profiles
+repkmer_result: Optional[REPkmerResult] = None
+trace_hist_all: Optional[go.Bar] = None
+trace_profile: Optional[go.Scatter] = None
+bases_shown = False   # If True, need to remove bases on plot when relayouted
 
 
 ### ----------------------------------------------------------------------- ###
@@ -23,53 +43,14 @@ app = dash.Dash(__name__,
 ### ----------------------------------------------------------------------- ###
 
 
-# Classification thresholds
-ERROR_HAPLO, HAPLO_DIPLO, DIPLO_REPEAT = None, None, None
-
-
-def load_count_dist(db_fname: str,
-                    max_count: int) -> Counter:
-    """Load global k-mer count frequencies in the database."""
-    global ERROR_HAPLO, HAPLO_DIPLO, DIPLO_REPEAT
-    count_freqs = Counter()
-    if not os.path.exists(db_fname):
-        return count_freqs
-    command = f"REPkmer -x{max_count} {db_fname}"
-    lines = run_command(command).strip().split('\n')
-    for i, line in enumerate(lines):
-        if line.strip().startswith("Error"):
-            # Load thresholds for classification
-            _, _, eh, _, _, _, hd, _, _, _, dr, _, _ = line.strip().split()
-            ERROR_HAPLO = int(eh)
-            HAPLO_DIPLO = int(hd)
-            DIPLO_REPEAT = int(dr)
-        if line.strip() == "K-mer Histogram":
-            lines = lines[i:]
-            break
-    for line in lines:
-        data = line.strip().split()
-        if len(data) != 3:
-            continue
-        kmer_count, freq, _ = data
-        kmer_count = kmer_count[:-1]
-        if kmer_count[-1] == '+':
-            kmer_count = kmer_count[:-1]
-        count_freqs[int(kmer_count)] = int(freq)
-    return count_freqs
-
-
-# Global cache for global k-mer count frequencies
-global_dist_trace = None
-
-
 @app.callback(
-    Output('kmer-count-dist', 'figure'),
-    [Input('submit-count-freq', 'n_clicks'),
-     Input('submit-kmer-profile', 'n_clicks')],
+    Output('fig-dist', 'figure'),
+    [Input('submit-dist', 'n_clicks'),
+     Input('submit-profile', 'n_clicks')],
     [State('db-fname', 'value'),
      State('read-id', 'value'),
      State('max-count-dist', 'value'),
-     State('kmer-count-dist', 'figure')]
+     State('fig-dist', 'figure')]
 )
 def update_count_dist(n_clicks_dist: int,
                       n_clicks_profile: int,
@@ -77,58 +58,42 @@ def update_count_dist(n_clicks_dist: int,
                       read_id: int,
                       max_count: int,
                       fig: go.Figure) -> go.Figure:
-    """Update the count distribution."""
-    global global_dist_trace
+    """Update the aggregated k-mer count distribution."""
+    global repkmer_result, trace_hist_all
     ctx = dash.callback_context
     max_count = int(max_count)
     if (not ctx.triggered
-            or ctx.triggered[0]["prop_id"] == "submit-count-freq.n_clicks"):
-        count_freqs = load_count_dist(db_fname, max_count)
-        tot_freq = sum(list(count_freqs.values()))
-        count_freqs = {k: v / tot_freq * 100 for k, v in count_freqs.items()}
-        global_dist_trace = pl.make_hist(count_freqs,
-                                         bin_size=1,
-                                         col="gray",
-                                         name="All k-mers",
-                                         show_legend=True)
-        threshold_lines = [pl.make_line(ERROR_HAPLO, 0, ERROR_HAPLO, 1,
+            or ctx.triggered[0]["prop_id"] == "submit-dist.n_clicks"):
+        # Draw the global k-mer count distribution from all reads
+        repkmer_result = load_count_dist(db_fname, max_count)
+        if repkmer_result is None:
+            raise PreventUpdate
+        trace_hist_all = pl.make_hist(repkmer_result.count_rel_freqs,
+                                      bin_size=1,
+                                      col="gray",
+                                      name="All reads",
+                                      show_legend=True)
+        threshold_lines = [pl.make_line(count, 0, count, 1,
                                         yref="paper",
                                         width=2,
-                                        col="coral",
-                                        layer="above"),
-                           pl.make_line(HAPLO_DIPLO, 0, HAPLO_DIPLO, 1,
-                                        yref="paper",
-                                        width=2,
-                                        col="navy",
-                                        layer="above"),
-                           pl.make_line(DIPLO_REPEAT, 0, DIPLO_REPEAT, 1,
-                                        yref="paper",
-                                        width=2,
-                                        col="mediumvioletred",
-                                        layer="above")]
-        layout = pl.make_layout(width=800,
-                                height=400,
-                                x_title="K-mer count",
-                                y_title="Relative frequency [%]",
-                                shapes=threshold_lines)
-        layout["barmode"] = "overlay"
-        return go.Figure(data=global_dist_trace,
-                         layout=layout)
-    elif ctx.triggered[0]["prop_id"] == "submit-kmer-profile.n_clicks":
+                                        col=THRESHOLD_COLS[name],
+                                        layer="above")
+                           for name, count in repkmer_result.thresholds.items()]
+        return go.Figure(data=trace_hist_all,
+                         layout=(pl.make_layout(shapes=threshold_lines)
+                                 .update(fig["layout"])))
+    elif ctx.triggered[0]["prop_id"] == "submit-profile.n_clicks":
         read_id = int(read_id)
-        # TODO: reuse count data loaded for profile?
-        _, counts = load_kmer_profile(db_fname, read_id)
-        counts = list(filter(lambda x: x > 0, counts))
-        count_freqs = Counter([min(count, max_count) for count in counts])
-        tot_freq = sum(list(count_freqs.values()))
-        count_freqs = {k: v / tot_freq * 100 for k, v in count_freqs.items()}
-        return go.Figure(data=[global_dist_trace,
-                               pl.make_hist(count_freqs,
-                                            bin_size=1,
-                                            col="turquoise",
-                                            opacity=0.7,
-                                            name=f"Read {read_id}",
-                                            show_legend=True)],
+        profile = load_kmer_profile(db_fname, read_id)
+        if profile is None:
+            raise PreventUpdate
+        trace_hist_read = pl.make_hist(profile.count_rel_freqs(max_count=max_count),
+                                       bin_size=1,
+                                       col="turquoise",
+                                       opacity=0.7,
+                                       name=f"Read {read_id}",
+                                       show_legend=True)
+        return go.Figure(data=[trace_hist_all, trace_hist_read],
                          layout=fig["layout"])
 
 
@@ -137,43 +102,14 @@ def update_count_dist(n_clicks_dist: int,
 ### ----------------------------------------------------------------------- ###
 
 
-def load_kmer_profile(db_fname: str,
-                      read_id: int) -> Tuple[List[str], List[int]]:
-    """Load k-mer count profile of a single read."""
-    if not os.path.exists(db_fname):
-        return [], []
-    command = f"KMlook {db_fname} {read_id}"
-    lines = run_command(command).strip().split('\n')
-    assert lines[2].startswith('len'), "Invalid KMlook output"
-    read_length = int(lines[2].strip().split()[2])
-    bases, counts = [''] * read_length, [0] * read_length
-    for line in lines[3:]:
-        data = line.strip().split()
-        if data[0][-1] == ':':
-            if data[2] == 'Z':
-                pos, base = data[:2]
-                count = 0
-            else:
-                pos, base, count = data[:3]
-            pos = int(pos[:-1])
-            bases[pos] = base
-            counts[pos] = int(count)
-    return bases, counts
-
-
-# Global cache for k-mer profile plot
-bases, counts = [], []
-bases_shown = False   # to judge if we should remove labels when relayouted
-
-
 @app.callback(
-    Output('kmer-profile-graph', 'figure'),
-    [Input('submit-kmer-profile', 'n_clicks'),
-     Input('kmer-profile-graph', 'relayoutData')],
+    Output('fig-profile', 'figure'),
+    [Input('submit-profile', 'n_clicks'),
+     Input('fig-profile', 'relayoutData')],
     [State('db-fname', 'value'),
      State('read-id', 'value'),
      State('max-count-profile', 'value'),
-     State('kmer-profile-graph', 'figure')]
+     State('fig-profile', 'figure')]
 )
 def update_kmer_profile(n_clicks: int,
                         relayout_data: Any,
@@ -182,83 +118,61 @@ def update_kmer_profile(n_clicks: int,
                         max_count: int,
                         fig: go.Figure) -> go.Figure:
     """Update the count profile plot."""
-    global bases, counts, bases_shown
+    global trace_profile, bases_shown
     ctx = dash.callback_context
     if not ctx.triggered:
-        return go.Figure(layout=pl.make_layout(x_title="Position",
-                                               y_title="Count"))
-    if ctx.triggered[0]["prop_id"] == "submit-kmer-profile.n_clicks":
-        # Draw a new plot from scratch
+        raise PreventUpdate
+    if ctx.triggered[0]["prop_id"] == "submit-profile.n_clicks":
+        # Draw a k-mer count profile from scratch
         read_id = int(read_id)
-        bases, counts = load_kmer_profile(db_fname, read_id)
+        profile = load_kmer_profile(db_fname, read_id)
+        if profile is None:
+            raise PreventUpdate
         bases_shown = False
         if not isinstance(max_count, int):
-            max_count = max(counts)
-        threshold_lines = [pl.make_line(0, ERROR_HAPLO, 1, ERROR_HAPLO,
-                                        xref="paper",
-                                        col="coral",
-                                        layer="below"),
-                           pl.make_line(0, HAPLO_DIPLO, 1, HAPLO_DIPLO,
-                                        xref="paper",
-                                        col="navy",
-                                        layer="below"),
-                           pl.make_line(0, DIPLO_REPEAT, 1, DIPLO_REPEAT,
-                                        xref="paper",
-                                        col="mediumvioletred",
-                                        layer="below")]
-        layout = pl.make_layout(width=1800,
-                                height=500,
-                                x_title="Position",
-                                y_title="Count",
-                                y_range=(0, max_count),
-                                y_grid=False,
-                                shapes=threshold_lines)
-        layout["barmode"] = "overlay"
-        return go.Figure(data=pl.make_scatter(x=list(range(len(counts))),
-                                              y=counts,
-                                              mode="lines",
-                                              col="black",
-                                              name="Depth",
-                                              show_legend=True),
-                         layout=layout)
-    elif ctx.triggered[0]["prop_id"] == "kmer-profile-graph.relayoutData":
-        if fig is None or len(fig["data"]) == 0:
+            max_count = max(profile.counts)
+        trace_profile = pl.make_scatter(x=list(range(len(profile.counts))),
+                                        y=profile.counts,
+                                        mode="lines",
+                                        col="black")
+        threshold_lines = ([pl.make_line(0, count, 1, count,
+                                         xref="paper",
+                                         col=THRESHOLD_COLS[name],
+                                         layer="below")
+                            for name, count in repkmer_result.thresholds.items()]
+                           if repkmer_result is not None else None)
+        return go.Figure(data=trace_profile,
+                         layout=(pl.make_layout().update(fig["layout"])
+                                 .update(pl.make_layout(y_range=(0, max_count),
+                                                        shapes=threshold_lines),
+                                         overwrite=True)))
+    elif ctx.triggered[0]["prop_id"] == "fig-profile.relayoutData":
+        if len(fig["data"]) == 0:
             raise PreventUpdate
         xmin, xmax = map(int, fig["layout"]["xaxis"]["range"])
         xmin = max(0, xmin)
-        xmax = min(len(counts), xmax)
+        xmax = min(len(profile.counts), xmax)
         if xmax - xmin < 300:
             # Show bases if the plotting region is shorter than 300 bp
             bases_shown = True
-            return go.Figure(data=([pl.make_scatter(x=list(range(xmin, xmax)),
-                                                    y=counts[xmin:xmax],
-                                                    text=bases[xmin:xmax],
-                                                    text_pos="top center",
-                                                    mode="text"),
-                                    pl.make_hist({i: max(0, counts[i] - counts[i - 1])
-                                                  for i in range(max(1, xmin), xmax)},
-                                                 bin_size=1,
-                                                 col="red"),
-                                    pl.make_hist({i: -max(0, - counts[i] + counts[i - 1])
-                                                  for i in range(max(1, xmin), xmax)},
-                                                 bin_size=1,
-                                                 col="blue")]
-                                   + fig["data"]),
+            trace_bases = pl.make_scatter(x=list(range(xmin, xmax)),
+                                          y=profile.counts[xmin:xmax],
+                                          text=profile.bases[xmin:xmax],
+                                          text_pos="top center",
+                                          mode="text")
+            return go.Figure(data=[trace_bases, trace_profile],
                              layout=fig["layout"])
         elif bases_shown:
             # Remove the drawn bases if we left the desired plotting region
             bases_shown = False
-            return go.Figure(data=pl.make_scatter(x=list(range(len(counts))),
-                                                  y=counts,
-                                                  mode="lines",
-                                                  col="black"),
+            return go.Figure(data=trace_profile,
                              layout=fig["layout"])
         else:
             raise PreventUpdate
 
 
 ### ----------------------------------------------------------------------- ###
-###                           Layout, Options, etc.                         ###
+###                   Layout, Command-line arguments, etc.                  ###
 ### ----------------------------------------------------------------------- ###
 
 
@@ -269,7 +183,7 @@ def main():
                   dcc.Input(id='db-fname',
                             value=args.input_db,
                             type='text')]),
-        html.Div([html.Button(id='submit-count-freq',
+        html.Div([html.Button(id='submit-dist',
                               n_clicks=0,
                               children='Draw k-mer count distribution'),
                   " [OPTIONS]",
@@ -277,21 +191,33 @@ def main():
                   dcc.Input(id='max-count-dist',
                             value='100',
                             type='number')]),
-        dcc.Graph(id='kmer-count-dist',
+        dcc.Graph(id='fig-dist',
+                  figure=go.Figure(
+                      layout=pl.make_layout(width=800,
+                                            height=400,
+                                            x_title="K-mer count",
+                                            y_title="Relative frequency [%]",
+                                            barmode="overlay")),
                   config=dict(toImageButtonOptions=dict(format=args.download_as))),
         html.Div(["Read ID: ",
                   dcc.Input(id='read-id',
                             value='',
                             type='number')]),
-        html.Div([html.Button(id='submit-kmer-profile',
+        html.Div([html.Button(id='submit-profile',
                               n_clicks=0,
-                              children='Draw k-mer profile'),
+                              children='Draw k-mer count profile'),
                   " [OPTIONS]",
                   " Max count = ",
                   dcc.Input(id='max-count-profile',
                             value='',
                             type='number')]),
-        dcc.Graph(id='kmer-profile-graph',
+        dcc.Graph(id='fig-profile',
+                  figure=go.Figure(
+                      layout=pl.make_layout(width=1800,
+                                            height=500,
+                                            x_title="Position",
+                                            y_title="Count",
+                                            y_grid=False)),
                   config=dict(toImageButtonOptions=dict(format=args.download_as)))
     ])
     app.run_server(debug=args.debug_mode)
@@ -304,6 +230,7 @@ def parse_args() -> argparse.Namespace:
         "-i",
         "--input_db",
         type=str,
+        default="",
         help="Input DAZZ_DB file name.")
     parser.add_argument(
         "-f",
