@@ -14,6 +14,7 @@ from dash.dependencies import Input, Output, State, ALL
 from dash.exceptions import PreventUpdate
 from BITS.util.proc import run_command
 from .io import REPkmerResult, CountProfile, load_count_dist, load_kmer_profile
+from .visualize import gen_traces_profile
 
 pio.templates.default = 'plotly_white'
 app = dash.Dash(__name__,
@@ -27,13 +28,11 @@ app = dash.Dash(__name__,
 THRESHOLD_COLS = {'error_haplo': "coral",
                   'haplo_diplo': "navy",
                   'diplo_repeat': "mediumvioletred"}
-CLASS_COLS = {'E': "red",
-              'H': "green",
-              'D': "blue"}
 
 # Cache for k-mer count frequencies/profiles
 repkmer_result: Optional[REPkmerResult] = None
 trace_hist_all: Optional[go.Bar] = None
+profile: Optional[CountProfile] = None
 trace_profile: Optional[go.Scatter] = None
 bases_shown = False   # If True, need to remove bases on plot when relayouted
 
@@ -118,7 +117,7 @@ def update_kmer_profile(n_clicks: int,
                         max_count: int,
                         fig: go.Figure) -> go.Figure:
     """Update the count profile plot."""
-    global trace_profile, bases_shown
+    global profile, trace_profile, bases_shown
     ctx = dash.callback_context
     if not ctx.triggered:
         raise PreventUpdate
@@ -131,10 +130,7 @@ def update_kmer_profile(n_clicks: int,
         bases_shown = False
         if not isinstance(max_count, int):
             max_count = max(profile.counts)
-        trace_profile = pl.make_scatter(x=list(range(len(profile.counts))),
-                                        y=profile.counts,
-                                        mode="lines",
-                                        col="black")
+        trace_profile = gen_trace_profile(profile.counts)
         threshold_lines = ([pl.make_line(0, count, 1, count,
                                          xref="paper",
                                          col=THRESHOLD_COLS[name],

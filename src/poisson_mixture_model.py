@@ -131,5 +131,6 @@ def variational_inference(data: Sequence[int],
         update_q_partition()
         if verbose:
             print(f"partition_alphas={partition_alphas}")
+        # TODO: impl stopping criterion
     return (np.argmax(assignment_etas, axis=1),
             [lambda_as[k] / lambda_bs[k] for k in range(K)])
