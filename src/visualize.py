@@ -14,6 +14,7 @@ def gen_traces_profile(counts: Sequence[int],
                        line_col: str = "black",
                        max_count: Optional[int] = None,
                        marker_size: int = 4) -> List[go.Scatter]:
+    # TODO: find a better way of decomposing modules
     traces = [pl.make_scatter(x=list(range(len(counts))),
                               y=counts,
                               mode="lines",
