@@ -151,6 +151,7 @@ def update_kmer_profile(n_clicks: int,
         if xmax - xmin < 300:
             # Show bases if the plotting region is shorter than 300 bp
             cache.bases_shown = True
+            print(list(cache.read.seq[xmin:xmax]))
             trace_bases = pl.make_scatter(x=list(range(xmin, xmax)),
                                           y=cache.read.counts[xmin:xmax],
                                           text=list(cache.read.seq[xmin:xmax]),
