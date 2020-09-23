@@ -1,49 +1,24 @@
 import os
-from dataclasses import dataclass, field
-from typing import Optional, Tuple, List, Dict
-from typing_extensions import TypedDict
+from typing import Optional, Tuple
 from collections import Counter
 from BITS.util.proc import run_command
-
-
-class CountThresholds(TypedDict):
-    error_haplo: int
-    haplo_diplo: int
-    diplo_repeat: int
-
-
-@dataclass
-class REPkmerResult:
-    count_freqs: Counter
-    thresholds: CountThresholds
-
-    @property
-    def count_rel_freqs(self) -> Counter:
-        return to_rel_freqs(self.count_freqs)
-
-
-@dataclass
-class CountProfile:
-    counts: List[int]
-    bases: List[str]
-
-    def count_freqs(self, max_count: Optional[int] = None) -> Counter:
-        counts = (self.counts if max_count is None
-                  else [min(count, max_count) for count in self.counts])
-        return Counter(list(filter(lambda x: x > 0, counts)))
-
-    def count_rel_freqs(self, max_count: Optional[int] = None) -> Counter:
-        return to_rel_freqs(self.count_freqs(max_count))
-
-
-def to_rel_freqs(c: Counter) -> Counter:
-    tot_freq = sum(list(c.values()))
-    return {k: v / tot_freq * 100 for k, v in c.items()}
+from .type import StateThresholds, RelCounter, ProfiledRead
 
 
 def load_count_dist(db_fname: str,
-                    max_count: Optional[int] = None) -> Optional[REPkmerResult]:
-    """Load global k-mer count frequencies in the database."""
+                    max_count: Optional[int] = None) -> Optional[Tuple[RelCounter, StateThresholds]]:
+    """Load global k-mer count frequencies in a database using `REPkmer` command.
+
+    positional arguments:
+      @ db_fname : DAZZ_DB file name.
+
+    optional arguments:
+      @ max_count : `-x` option for `REPkmer` command.
+
+    return value:
+      @ k-mer count frequencies
+      @ thresholds between k-mer states
+    """
     if not (isinstance(db_fname, str) and os.path.exists(db_fname)):
         return None
     option = f"-x{max_count}" if max_count is not None else ""
@@ -67,15 +42,25 @@ def load_count_dist(db_fname: str,
         if kmer_count[-1] == '+':
             kmer_count = kmer_count[:-1]
         count_freqs[int(kmer_count)] = int(freq)
-    return REPkmerResult(count_freqs=count_freqs,
-                         thresholds=CountThresholds(error_haplo=eh,
-                                                    haplo_diplo=hd,
-                                                    diplo_repeat=dr))
+    return (RelCounter(count_freqs),
+            StateThresholds(error_haplo=eh,
+                            haplo_diplo=hd,
+                            diplo_repeat=dr))
 
 
 def load_kmer_profile(db_fname: str,
-                      read_id: int) -> Optional[CountProfile]:
-    """Load k-mer count profile of a single read."""
+                      read_id: int) -> Optional[ProfiledRead]:
+    """Load k-mer count profile of a single read using `KMlook` command.
+
+    positional arguments:
+      @ db_fname : DAZZ_DB file name.
+
+    optional arguments:
+      @ read_id : Single DAZZ_DB read ID to be loaded.
+
+    return value:
+      @ Sequence record with count profile
+    """
     if not (isinstance(db_fname, str) and os.path.exists(db_fname)):
         return None
     command = f"KMlook {db_fname} {read_id}"
@@ -93,5 +78,5 @@ def load_kmer_profile(db_fname: str,
             pos = int(pos[:-1])
             bases[pos] = base
             counts[pos] = int(count)
-    return CountProfile(bases=bases,
+    return ProfiledRead(seq=''.join(bases),
                         counts=counts)

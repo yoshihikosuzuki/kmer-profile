@@ -1,41 +1,42 @@
-import os
 import argparse
-from collections import Counter
-from typing import Any, Optional, Tuple, List
-from logzero import logger
+from dataclasses import dataclass
+from typing import Any, Optional
 import plotly.io as pio
 import plotly.graph_objects as go
-from plotly.basedatatypes import BaseTraceType
 import plotly_light as pl
 import dash
 import dash_html_components as html
 import dash_core_components as dcc
-from dash.dependencies import Input, Output, State, ALL
+from dash.dependencies import Input, Output, State
 from dash.exceptions import PreventUpdate
-from BITS.util.proc import run_command
-from .io import REPkmerResult, CountProfile, load_count_dist, load_kmer_profile
-from .visualize import gen_traces_profile
+from .type import StateThresholds, RelCounter, ProfiledRead
+from .io import load_count_dist, load_kmer_profile
+from .visualizer import gen_traces_profile
 
 pio.templates.default = 'plotly_white'
 app = dash.Dash(__name__,
                 external_stylesheets=['https://codepen.io/chriddyp/pen/bWLwgP.css'])
 
+
+@dataclass(repr=False, eq=False)
+class Cache:
+    """Cache for data that are needed to be shared over multiple operations."""
+    th_global: Optional[StateThresholds] = None
+    count_global: Optional[RelCounter] = None
+    trace_hist_global: Optional[go.Bar] = None
+    read: Optional[ProfiledRead] = None
+    trace_profile: Optional[go.Scatter] = None
+    bases_shown: bool = False   # If True, need to remove bases on plot when relayouted
+
 ### ----------------------------------------------------------------------- ###
 ###                     constants and global variables                      ###
 ### ----------------------------------------------------------------------- ###
 
-# Colors
+
 THRESHOLD_COLS = {'error_haplo': "coral",
                   'haplo_diplo': "navy",
                   'diplo_repeat': "mediumvioletred"}
-
-# Cache for k-mer count frequencies/profiles
-repkmer_result: Optional[REPkmerResult] = None
-trace_hist_all: Optional[go.Bar] = None
-profile: Optional[CountProfile] = None
-trace_profile: Optional[go.Scatter] = None
-bases_shown = False   # If True, need to remove bases on plot when relayouted
-
+cache = Cache()
 
 ### ----------------------------------------------------------------------- ###
 ###                        k-mer count distribution                         ###
@@ -58,41 +59,41 @@ def update_count_dist(n_clicks_dist: int,
                       max_count: int,
                       fig: go.Figure) -> go.Figure:
     """Update the aggregated k-mer count distribution."""
-    global repkmer_result, trace_hist_all
+    global cache
     ctx = dash.callback_context
     max_count = int(max_count)
     if (not ctx.triggered
             or ctx.triggered[0]["prop_id"] == "submit-dist.n_clicks"):
         # Draw the global k-mer count distribution from all reads
-        repkmer_result = load_count_dist(db_fname, max_count)
-        if repkmer_result is None:
+        ret = load_count_dist(db_fname, max_count)
+        if ret is None:
             raise PreventUpdate
-        trace_hist_all = pl.make_hist(repkmer_result.count_rel_freqs,
-                                      bin_size=1,
-                                      col="gray",
-                                      name="All reads",
-                                      show_legend=True)
+        cache.th_global, cache.count_global = ret
+        cache.trace_hist_global = pl.make_hist(cache.count_global.relative(),
+                                               bin_size=1,
+                                               col="gray",
+                                               name="All reads",
+                                               show_legend=True)
         threshold_lines = [pl.make_line(count, 0, count, 1,
                                         yref="paper",
                                         width=2,
                                         col=THRESHOLD_COLS[name],
                                         layer="above")
-                           for name, count in repkmer_result.thresholds.items()]
-        return go.Figure(data=trace_hist_all,
-                         layout=(pl.make_layout(shapes=threshold_lines)
-                                 .update(fig["layout"])))
+                           for name, count in cache.th_global._asdict().items()]
+        return go.Figure(data=cache.trace_hist_global,
+                         layout=pl.merge_layout(pl.make_layout(shapes=threshold_lines),
+                                                fig["layout"]))
     elif ctx.triggered[0]["prop_id"] == "submit-profile.n_clicks":
-        read_id = int(read_id)
-        profile = load_kmer_profile(db_fname, read_id)
-        if profile is None:
+        read = load_kmer_profile(db_fname, int(read_id))
+        if read is None:
             raise PreventUpdate
-        trace_hist_read = pl.make_hist(profile.count_rel_freqs(max_count=max_count),
+        trace_hist_read = pl.make_hist(read.count_freqs(max_count).relative(),
                                        bin_size=1,
                                        col="turquoise",
                                        opacity=0.7,
                                        name=f"Read {read_id}",
                                        show_legend=True)
-        return go.Figure(data=[trace_hist_all, trace_hist_read],
+        return go.Figure(data=[cache.trace_hist_global, trace_hist_read],
                          layout=fig["layout"])
 
 
@@ -117,51 +118,50 @@ def update_kmer_profile(n_clicks: int,
                         max_count: int,
                         fig: go.Figure) -> go.Figure:
     """Update the count profile plot."""
-    global profile, trace_profile, bases_shown
+    global cache
     ctx = dash.callback_context
     if not ctx.triggered:
         raise PreventUpdate
     if ctx.triggered[0]["prop_id"] == "submit-profile.n_clicks":
         # Draw a k-mer count profile from scratch
-        read_id = int(read_id)
-        profile = load_kmer_profile(db_fname, read_id)
-        if profile is None:
+        read = load_kmer_profile(db_fname, int(read_id))
+        if read is None:
             raise PreventUpdate
-        bases_shown = False
+        cache.read = read
+        cache.bases_shown = False
         if not isinstance(max_count, int):
-            max_count = max(profile.counts)
-        trace_profile = gen_traces_profile(profile.counts)
+            max_count = max(cache.read.counts)
+        cache.trace_profile = gen_traces_profile(cache.read.counts)
         threshold_lines = ([pl.make_line(0, count, 1, count,
                                          xref="paper",
                                          col=THRESHOLD_COLS[name],
                                          layer="below")
-                            for name, count in repkmer_result.thresholds.items()]
-                           if repkmer_result is not None else None)
-        return go.Figure(data=trace_profile,
-                         layout=(pl.make_layout().update(fig["layout"])
-                                 .update(pl.make_layout(y_range=(0, max_count),
-                                                        shapes=threshold_lines),
-                                         overwrite=True)))
+                            for name, count in cache.th_global._asdict().items()]
+                           if cache.th_global is not None else None)
+        return go.Figure(data=cache.trace_profile,
+                         layout=pl.merge_layout(pl.make_layout(y_range=(0, max_count),
+                                                               shapes=threshold_lines),
+                                                fig["layout"]))
     elif ctx.triggered[0]["prop_id"] == "fig-profile.relayoutData":
         if len(fig["data"]) == 0:
             raise PreventUpdate
         xmin, xmax = map(int, fig["layout"]["xaxis"]["range"])
         xmin = max(0, xmin)
-        xmax = min(len(profile.counts), xmax)
+        xmax = min(cache.read.length, xmax)
         if xmax - xmin < 300:
             # Show bases if the plotting region is shorter than 300 bp
-            bases_shown = True
+            cache.bases_shown = True
             trace_bases = pl.make_scatter(x=list(range(xmin, xmax)),
-                                          y=profile.counts[xmin:xmax],
-                                          text=profile.bases[xmin:xmax],
+                                          y=cache.read.counts[xmin:xmax],
+                                          text=cache.read.bases[xmin:xmax],
                                           text_pos="top center",
                                           mode="text")
-            return go.Figure(data=[trace_bases, trace_profile],
+            return go.Figure(data=[trace_bases, cache.trace_profile],
                              layout=fig["layout"])
-        elif bases_shown:
+        elif cache.bases_shown:
             # Remove the drawn bases if we left the desired plotting region
-            bases_shown = False
-            return go.Figure(data=trace_profile,
+            cache.bases_shown = False
+            return go.Figure(data=cache.trace_profile,
                              layout=fig["layout"])
         else:
             raise PreventUpdate
