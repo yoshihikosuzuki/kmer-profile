@@ -153,7 +153,7 @@ def update_kmer_profile(n_clicks: int,
             cache.bases_shown = True
             trace_bases = pl.make_scatter(x=list(range(xmin, xmax)),
                                           y=cache.read.counts[xmin:xmax],
-                                          text=cache.read.bases[xmin:xmax],
+                                          text=cache.read.seq[xmin:xmax],
                                           text_pos="top center",
                                           mode="text")
             return go.Figure(data=[trace_bases, cache.trace_profile],
