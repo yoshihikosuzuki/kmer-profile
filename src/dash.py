@@ -68,7 +68,7 @@ def update_count_dist(n_clicks_dist: int,
         ret = load_count_dist(db_fname, max_count)
         if ret is None:
             raise PreventUpdate
-        cache.th_global, cache.count_global = ret
+        cache.count_global, cache.th_global = ret
         cache.trace_hist_global = pl.make_hist(cache.count_global.relative(),
                                                bin_size=1,
                                                col="gray",
