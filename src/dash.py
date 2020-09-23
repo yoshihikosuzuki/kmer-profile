@@ -131,7 +131,7 @@ def update_kmer_profile(n_clicks: int,
         cache.bases_shown = False
         if not isinstance(max_count, int):
             max_count = max(cache.read.counts)
-        cache.trace_profile = gen_traces_profile(cache.read.counts)
+        cache.trace_profile = gen_traces_profile(cache.read.counts)[0]
         threshold_lines = ([pl.make_line(0, count, 1, count,
                                          xref="paper",
                                          col=THRESHOLD_COLS[name],
