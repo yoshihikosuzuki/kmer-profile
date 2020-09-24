@@ -65,9 +65,10 @@ def update_count_dist(n_clicks_dist: int,
                                                name="All reads",
                                                show_legend=True)
         return go.Figure(data=cache.trace_hist_global,
-                         layout=pl.merge_layout(pl.make_layout(x_range=None,
+                         layout=pl.merge_layout(fig["layout"],
+                                                pl.make_layout(x_range=None,
                                                                y_range=None),
-                                                fig["layout"]))
+                                                overwirte=True))
     elif ctx.triggered[0]["prop_id"] == "submit-profile.n_clicks":
         read = load_kmer_profile(db_fname, int(read_id))
         if read is None:
