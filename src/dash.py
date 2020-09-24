@@ -117,11 +117,11 @@ def update_kmer_profile(n_clicks: int,
                                               y=cache.read.counts,
                                               text=[f"pos = {i}<br>count = {c}"
                                                     for i, c in enumerate(cache.read.counts)],
-                                              text_pos="bottom right",
                                               mode="lines",
                                               col="black")
         return go.Figure(data=cache.trace_profile,
-                         layout=pl.merge_layout(pl.make_layout(y_range=(0, max_count)),
+                         layout=pl.merge_layout(pl.make_layout(x_range=None,
+                                                               y_range=(0, max_count)),
                                                 fig["layout"]))
     elif ctx.triggered[0]["prop_id"] == "fig-profile.relayoutData":
         if len(fig["data"]) == 0:
