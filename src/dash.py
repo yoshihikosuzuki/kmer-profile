@@ -57,10 +57,9 @@ def update_count_dist(n_clicks_dist: int,
     if (not ctx.triggered
             or ctx.triggered[0]["prop_id"] == "submit-dist.n_clicks"):
         # Draw the global k-mer count distribution from all reads
-        ret = load_count_dist(db_fname, max_count)
-        if ret is None:
+        cache.count_global = load_count_dist(db_fname, max_count)
+        if cache.count_global is None:
             raise PreventUpdate
-        cache.count_global, _ = ret
         cache.trace_hist_global = pl.make_hist(cache.count_global.relative(),
                                                bin_size=1,
                                                col="gray",
@@ -109,10 +108,9 @@ def update_kmer_profile(n_clicks: int,
         raise PreventUpdate
     if ctx.triggered[0]["prop_id"] == "submit-profile.n_clicks":
         # Draw a k-mer count profile from scratch
-        read = load_kmer_profile(db_fname, int(read_id))
-        if read is None:
+        cache.read = load_kmer_profile(db_fname, int(read_id))
+        if cache.read is None:
             raise PreventUpdate
-        cache.read = read
         cache.bases_shown = False
         if not isinstance(max_count, int):
             max_count = max(cache.read.counts)
