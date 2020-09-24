@@ -123,9 +123,10 @@ def update_kmer_profile(n_clicks: int,
                                               mode="lines",
                                               col="black")
         return go.Figure(data=cache.trace_profile,
-                         layout=pl.merge_layout(pl.make_layout(x_range=None,
+                         layout=pl.merge_layout(fig["layout"],
+                                                pl.make_layout(x_range=None,
                                                                y_range=(0, max_count)),
-                                                fig["layout"]))
+                                                overwrite=True))
     elif ctx.triggered[0]["prop_id"] == "fig-profile.relayoutData":
         if len(fig["data"]) == 0:
             raise PreventUpdate
