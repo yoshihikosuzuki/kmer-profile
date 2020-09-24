@@ -9,7 +9,7 @@ import dash_html_components as html
 import dash_core_components as dcc
 from dash.dependencies import Input, Output, State
 from dash.exceptions import PreventUpdate
-from .type import StateThresholds, RelCounter, ProfiledRead
+from .type import RelCounter, ProfiledRead
 from .io import load_count_dist, load_kmer_profile
 from .visualizer import gen_traces_profile
 
@@ -21,21 +21,13 @@ app = dash.Dash(__name__,
 @dataclass(repr=False, eq=False)
 class Cache:
     """Cache for data that are needed to be shared over multiple operations."""
-    th_global: Optional[StateThresholds] = None
     count_global: Optional[RelCounter] = None
     trace_hist_global: Optional[go.Bar] = None
     read: Optional[ProfiledRead] = None
     trace_profile: Optional[go.Scatter] = None
     bases_shown: bool = False   # If True, need to remove bases on plot when relayouted
 
-### ----------------------------------------------------------------------- ###
-###                     constants and global variables                      ###
-### ----------------------------------------------------------------------- ###
 
-
-THRESHOLD_COLS = {'error_haplo': "coral",
-                  'haplo_diplo': "navy",
-                  'diplo_repeat': "mediumvioletred"}
 cache = Cache()
 
 ### ----------------------------------------------------------------------- ###
@@ -68,21 +60,14 @@ def update_count_dist(n_clicks_dist: int,
         ret = load_count_dist(db_fname, max_count)
         if ret is None:
             raise PreventUpdate
-        cache.count_global, cache.th_global = ret
+        cache.count_global, _ = ret
         cache.trace_hist_global = pl.make_hist(cache.count_global.relative(),
                                                bin_size=1,
                                                col="gray",
                                                name="All reads",
                                                show_legend=True)
-        threshold_lines = [pl.make_line(count, 0, count, 1,
-                                        yref="paper",
-                                        width=2,
-                                        col=THRESHOLD_COLS[name],
-                                        layer="above")
-                           for name, count in cache.th_global._asdict().items()]
         return go.Figure(data=cache.trace_hist_global,
-                         layout=pl.merge_layout(pl.make_layout(shapes=threshold_lines),
-                                                fig["layout"]))
+                         layout=fig["layout"])
     elif ctx.triggered[0]["prop_id"] == "submit-profile.n_clicks":
         read = load_kmer_profile(db_fname, int(read_id))
         if read is None:
@@ -132,15 +117,8 @@ def update_kmer_profile(n_clicks: int,
         if not isinstance(max_count, int):
             max_count = max(cache.read.counts)
         cache.trace_profile = gen_traces_profile(cache.read.counts)[0]
-        threshold_lines = ([pl.make_line(0, count, 1, count,
-                                         xref="paper",
-                                         col=THRESHOLD_COLS[name],
-                                         layer="below")
-                            for name, count in cache.th_global._asdict().items()]
-                           if cache.th_global is not None else None)
         return go.Figure(data=cache.trace_profile,
-                         layout=pl.merge_layout(pl.make_layout(y_range=(0, max_count),
-                                                               shapes=threshold_lines),
+                         layout=pl.merge_layout(pl.make_layout(y_range=(0, max_count)),
                                                 fig["layout"]))
     elif ctx.triggered[0]["prop_id"] == "fig-profile.relayoutData":
         if len(fig["data"]) == 0:

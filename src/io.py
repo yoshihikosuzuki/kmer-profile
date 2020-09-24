@@ -1,12 +1,14 @@
 import os
-from typing import Optional, Tuple
+from typing import Union, Optional, Tuple
 from collections import Counter
 from BITS.util.proc import run_command
 from .type import StateThresholds, RelCounter, ProfiledRead
 
 
 def load_count_dist(db_fname: str,
-                    max_count: Optional[int] = None) -> Optional[Tuple[RelCounter, StateThresholds]]:
+                    max_count: Optional[int] = None,
+                    load_th: bool = False) \
+        -> Optional[Union[RelCounter, Tuple[RelCounter, StateThresholds]]]:
     """Load global k-mer count frequencies in a database using `REPkmer` command.
 
     positional arguments:
@@ -14,10 +16,11 @@ def load_count_dist(db_fname: str,
 
     optional arguments:
       @ max_count : `-x` option for `REPkmer` command.
+      @ load_th   : Load thresholds of naive classification as well.
 
     return value:
       @ k-mer count frequencies
-      @ thresholds between k-mer states
+      @ (thresholds between k-mer states) if `load_th` is True
     """
     if not (isinstance(db_fname, str) and os.path.exists(db_fname)):
         return None
@@ -42,10 +45,11 @@ def load_count_dist(db_fname: str,
         if kmer_count[-1] == '+':
             kmer_count = kmer_count[:-1]
         count_freqs[int(kmer_count)] = int(freq)
-    return (RelCounter(count_freqs),
-            StateThresholds(error_haplo=eh,
-                            haplo_diplo=hd,
-                            diplo_repeat=dr))
+    return (RelCounter(count_freqs) if not load_th
+            else (RelCounter(count_freqs),
+                  StateThresholds(error_haplo=eh,
+                                  haplo_diplo=hd,
+                                  diplo_repeat=dr)))
 
 
 def load_kmer_profile(db_fname: str,
