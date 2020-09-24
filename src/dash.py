@@ -115,8 +115,9 @@ def update_kmer_profile(n_clicks: int,
             max_count = max(cache.read.counts)
         cache.trace_profile = pl.make_scatter(x=list(range(cache.read.length)),
                                               y=cache.read.counts,
-                                              text=[f"pos={i}<br>count={c}"
+                                              text=[f"pos = {i}<br>count = {c}"
                                                     for i, c in enumerate(cache.read.counts)],
+                                              text_pos="bottom right",
                                               mode="lines",
                                               col="black")
         return go.Figure(data=cache.trace_profile,
