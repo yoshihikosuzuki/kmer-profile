@@ -11,7 +11,6 @@ from dash.dependencies import Input, Output, State
 from dash.exceptions import PreventUpdate
 from .type import RelCounter, ProfiledRead
 from .io import load_count_dist, load_kmer_profile
-from .visualizer import gen_traces_profile
 
 pio.templates.default = 'plotly_white'
 app = dash.Dash(__name__,
@@ -114,7 +113,12 @@ def update_kmer_profile(n_clicks: int,
         cache.bases_shown = False
         if not isinstance(max_count, int):
             max_count = max(cache.read.counts)
-        cache.trace_profile = gen_traces_profile(cache.read.counts)[0]
+        cache.trace_profile = pl.make_scatter(x=list(range(cache.read.length)),
+                                              y=cache.read.counts,
+                                              text=[f"pos={i}<br>count={c}"
+                                                    for i, c in enumerate(cache.read.counts)],
+                                              mode="lines",
+                                              col="black")
         return go.Figure(data=cache.trace_profile,
                          layout=pl.merge_layout(pl.make_layout(y_range=(0, max_count)),
                                                 fig["layout"]))
@@ -132,7 +136,7 @@ def update_kmer_profile(n_clicks: int,
                                           text=list(cache.read.seq[xmin:xmax]),
                                           text_pos="top center",
                                           mode="text")
-            return go.Figure(data=[trace_bases, cache.trace_profile],
+            return go.Figure(data=[cache.trace_profile, trace_bases],
                              layout=fig["layout"])
         elif cache.bases_shown:
             # Remove the drawn bases if we left the desired plotting region
