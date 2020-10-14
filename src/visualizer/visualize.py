@@ -3,9 +3,6 @@ from collections import defaultdict
 import plotly.graph_objects as go
 import plotly_light as pl
 from ..type import STATES, STATE_TO_COL, ProfiledRead
-from copy import deepcopy
-
-RANGE = [0, 100]
 
 
 def gen_fig_profiled_read(read: ProfiledRead,

@@ -30,7 +30,6 @@ class Cache:
 cache = Cache()
 
 K = 40   # TODO: change to an input
-state_to_col = {'E': "red", 'H': "blue", 'D': "green", 'R': "orange"}
 
 ### ----------------------------------------------------------------------- ###
 ###                        k-mer count distribution                         ###
