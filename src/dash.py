@@ -1,6 +1,6 @@
 import argparse
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Optional
 import plotly.io as pio
 import plotly.graph_objects as go
 import plotly_light as pl
@@ -12,7 +12,7 @@ from dash.exceptions import PreventUpdate
 from .type import RelCounter, ProfiledRead
 from .io import load_count_dist, load_kmer_profile
 from .classifier.heuristics import run_heuristics
-from .visualizer import gen_trace_profiled_read
+from .visualizer import gen_fig_profiled_read
 
 pio.templates.default = 'plotly_white'
 app = dash.Dash(__name__,
@@ -94,19 +94,15 @@ def update_count_dist(n_clicks_dist: int,
 @app.callback(
     Output('fig-profile', 'figure'),
     [Input('submit-profile', 'n_clicks'),
-     Input('submit-classify', 'n_clicks'),
-     Input('fig-profile', 'relayoutData')],
+     Input('submit-classify', 'n_clicks')],
     [State('db-fname', 'value'),
      State('read-id', 'value'),
-     State('max-count-profile', 'value'),
      State('fig-profile', 'figure')]
 )
 def update_kmer_profile(n_clicks_profile: int,
                         n_clicks_classify: int,
-                        relayout_data: Any,
                         db_fname: str,
                         read_id: int,
-                        max_count: int,
                         fig: go.Figure) -> go.Figure:
     """Update the count profile plot."""
     global cache
@@ -118,20 +114,15 @@ def update_kmer_profile(n_clicks_profile: int,
         cache.read = load_kmer_profile(db_fname, int(read_id))
         if cache.read is None:
             raise PreventUpdate
-        if not isinstance(max_count, int):
-            max_count = max(cache.read.counts)
-        return go.Figure(data=gen_trace_profiled_read(cache.read, K),
-                         layout=pl.merge_layout(fig["layout"],
-                                                pl.make_layout(x_range=None,
-                                                               y_range=(0, max_count)),
-                                                overwrite=True))
+        return gen_fig_profiled_read(cache.read, K,
+                                     layout=fig["layout"] if "layout" in fig else None)
     elif ctx.triggered[0]["prop_id"] == "submit-classify.n_clicks":
-        run_heuristics(cache.read, K)
-        return go.Figure(data=gen_trace_profiled_read(cache.read, K),
-                         layout=pl.merge_layout(fig["layout"],
-                                                pl.make_layout(x_range=None,
-                                                               y_range=(0, max_count)),
-                                                overwrite=True))
+        if cache.read is None:
+            raise PreventUpdate
+        # run_heuristics(cache.read, K)
+        return gen_fig_profiled_read(cache.read, K,
+                                     layout=fig["layout"] if "layout" in fig else None)
+    raise PreventUpdate
 
 
 ### ----------------------------------------------------------------------- ###
@@ -168,22 +159,14 @@ def main():
                             type='number')]),
         html.Div([html.Button(id='submit-profile',
                               n_clicks=0,
-                              children='Draw k-mer count profile'),
-                  " [OPTIONS]",
-                  " Max count = ",
-                  dcc.Input(id='max-count-profile',
-                            value='',
-                            type='number')]),
+                              children='Draw k-mer count profile')]),
         html.Div([html.Button(id='submit-classify',
                               n_clicks=0,
                               children='Classify k-mers')]),
         dcc.Graph(id='fig-profile',
                   figure=go.Figure(
                       layout=pl.make_layout(width=1800,
-                                            height=500,
-                                            x_title="Position",
-                                            y_title="Count",
-                                            y_grid=False)),
+                                            height=500)),
                   config=dict(toImageButtonOptions=dict(format=args.download_as)))
     ])
     app.run_server(debug=args.debug_mode)

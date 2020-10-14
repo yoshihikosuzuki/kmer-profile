@@ -3,11 +3,14 @@ from collections import defaultdict
 import plotly.graph_objects as go
 import plotly_light as pl
 from ..type import STATES, STATE_TO_COL, ProfiledRead
+from copy import deepcopy
+
+RANGE = [0, 100]
 
 
-def gen_trace_profiled_read(read: ProfiledRead,
-                            K: int,
-                            layout: Optional[go.Layout] = None) -> go.Figure:
+def gen_fig_profiled_read(read: ProfiledRead,
+                          K: int,
+                          layout: Optional[go.Layout] = None) -> go.Figure:
     trace_counts = pl.make_scatter(
         x=list(range(read.length)),
         y=read.counts,
@@ -24,7 +27,6 @@ def gen_trace_profiled_read(read: ProfiledRead,
         text=list(read.seq),
         text_pos="top center",
         mode="text",
-        text_size=10,
         name="Bases",
         show_legend=True,
         show_init=False)
@@ -47,13 +49,10 @@ def gen_trace_profiled_read(read: ProfiledRead,
     if layout is None:
         _layout = pl.merge_layout(_layout, layout, overwrite=True)
     fig = go.Figure(data=traces, layout=_layout)
-    max_count = max(read.counts)
     fig.update_layout(updatemenus=[
         dict(type="buttons",
-             buttons=[dict(label="All",
+             buttons=[dict(label="<100",
                            method="relayout",
-                           args=[{"yaxis.range": (0, max_count)}]),
-                      dict(label="<100",
-                           method="relayout",
-                           args=[{"yaxis.range": (0, 100)}])])])
+                           args=[{"yaxis.range[0]": 0,
+                                  "yaxis.range[1]": 100}])])])
     return fig

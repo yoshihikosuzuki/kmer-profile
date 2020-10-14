@@ -1,1 +1,1 @@
-from .visualize import gen_trace_profiled_read
+from .visualize import gen_fig_profiled_read
