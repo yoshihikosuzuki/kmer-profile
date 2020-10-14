@@ -4,7 +4,7 @@ import numpy as np
 from numpy import ma
 from scipy.stats import norm
 from .poisson_mixture_model import variational_inference
-from .visualize import gen_traces_profile
+from ..visualizer import gen_trace_profiled_read
 
 states = ['E', 'H', 'D']
 ASGN_TO_STATE = {0: 'E', 1: 'H', 2: 'D'}
@@ -29,8 +29,8 @@ def run_em_algorithm(counts: Sequence[int],
     depth_prior = dict(zip(states, lambdas))
     if show_plot:
         traces = [(None,
-                   gen_traces_profile(counts,
-                                      estimated_states))]
+                   gen_trace_profiled_read(counts,
+                                           estimated_states))]
     prev_states = estimated_states
     while True:
         smoothed_profiles = smooth_profiles(counts,
@@ -42,11 +42,11 @@ def run_em_algorithm(counts: Sequence[int],
             break
         prev_states = estimated_states
         if show_plot:
-            traces.append(([gen_traces_profile(smoothed_profiles[state],
-                                               line_col=STATE_COLS[state])
+            traces.append(([gen_trace_profiled_read(smoothed_profiles[state],
+                                                    line_col=STATE_COLS[state])
                             for state in {x for x in estimated_states}],
-                           gen_traces_profile(counts,
-                                              estimated_states=estimated_states)))
+                           gen_trace_profiled_read(counts,
+                                                   estimated_states=estimated_states)))
     return estimated_states
 
 

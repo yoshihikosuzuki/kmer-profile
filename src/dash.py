@@ -11,6 +11,8 @@ from dash.dependencies import Input, Output, State
 from dash.exceptions import PreventUpdate
 from .type import RelCounter, ProfiledRead
 from .io import load_count_dist, load_kmer_profile
+from .classifier.heuristics import run_heuristics
+from .visualizer import gen_trace_profiled_read
 
 pio.templates.default = 'plotly_white'
 app = dash.Dash(__name__,
@@ -23,11 +25,12 @@ class Cache:
     count_global: Optional[RelCounter] = None
     trace_hist_global: Optional[go.Bar] = None
     read: Optional[ProfiledRead] = None
-    trace_profile: Optional[go.Scatter] = None
-    bases_shown: bool = False   # If True, need to remove bases on plot when relayouted
 
 
 cache = Cache()
+
+K = 40   # TODO: change to an input
+state_to_col = {'E': "red", 'H': "blue", 'D': "green", 'R': "orange"}
 
 ### ----------------------------------------------------------------------- ###
 ###                        k-mer count distribution                         ###
@@ -88,16 +91,18 @@ def update_count_dist(n_clicks_dist: int,
 ### ----------------------------------------------------------------------- ###
 
 
-@ app.callback(
+@app.callback(
     Output('fig-profile', 'figure'),
     [Input('submit-profile', 'n_clicks'),
+     Input('submit-classify', 'n_clicks'),
      Input('fig-profile', 'relayoutData')],
     [State('db-fname', 'value'),
      State('read-id', 'value'),
      State('max-count-profile', 'value'),
      State('fig-profile', 'figure')]
 )
-def update_kmer_profile(n_clicks: int,
+def update_kmer_profile(n_clicks_profile: int,
+                        n_clicks_classify: int,
                         relayout_data: Any,
                         db_fname: str,
                         read_id: int,
@@ -113,43 +118,20 @@ def update_kmer_profile(n_clicks: int,
         cache.read = load_kmer_profile(db_fname, int(read_id))
         if cache.read is None:
             raise PreventUpdate
-        cache.bases_shown = False
         if not isinstance(max_count, int):
             max_count = max(cache.read.counts)
-        cache.trace_profile = pl.make_scatter(x=list(range(cache.read.length)),
-                                              y=cache.read.counts,
-                                              text=[f"pos = {i}<br>count = {c}"
-                                                    for i, c in enumerate(cache.read.counts)],
-                                              mode="lines",
-                                              col="black")
-        return go.Figure(data=cache.trace_profile,
+        return go.Figure(data=gen_trace_profiled_read(cache.read, K),
                          layout=pl.merge_layout(fig["layout"],
                                                 pl.make_layout(x_range=None,
                                                                y_range=(0, max_count)),
                                                 overwrite=True))
-    elif ctx.triggered[0]["prop_id"] == "fig-profile.relayoutData":
-        if len(fig["data"]) == 0:
-            raise PreventUpdate
-        xmin, xmax = map(int, fig["layout"]["xaxis"]["range"])
-        xmin = max(0, xmin)
-        xmax = min(cache.read.length, xmax)
-        if xmax - xmin < 300:
-            # Show bases if the plotting region is shorter than 300 bp
-            cache.bases_shown = True
-            trace_bases = pl.make_scatter(x=list(range(xmin, xmax)),
-                                          y=cache.read.counts[xmin:xmax],
-                                          text=list(cache.read.seq[xmin:xmax]),
-                                          text_pos="top center",
-                                          mode="text")
-            return go.Figure(data=[cache.trace_profile, trace_bases],
-                             layout=fig["layout"])
-        elif cache.bases_shown:
-            # Remove the drawn bases if we left the desired plotting region
-            cache.bases_shown = False
-            return go.Figure(data=cache.trace_profile,
-                             layout=fig["layout"])
-        else:
-            raise PreventUpdate
+    elif ctx.triggered[0]["prop_id"] == "submit-classify.n_clicks":
+        run_heuristics(cache.read, K)
+        return go.Figure(data=gen_trace_profiled_read(cache.read, K),
+                         layout=pl.merge_layout(fig["layout"],
+                                                pl.make_layout(x_range=None,
+                                                               y_range=(0, max_count)),
+                                                overwrite=True))
 
 
 ### ----------------------------------------------------------------------- ###
@@ -192,6 +174,9 @@ def main():
                   dcc.Input(id='max-count-profile',
                             value='',
                             type='number')]),
+        html.Div([html.Button(id='submit-classify',
+                              n_clicks=0,
+                              children='Classify k-mers')]),
         dcc.Graph(id='fig-profile',
                   figure=go.Figure(
                       layout=pl.make_layout(width=1800,

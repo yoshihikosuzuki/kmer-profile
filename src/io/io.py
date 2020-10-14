@@ -2,7 +2,7 @@ import os
 from typing import Union, Optional, Tuple
 from collections import Counter
 from BITS.util.proc import run_command
-from .type import StateThresholds, RelCounter, ProfiledRead
+from ..type import StateThresholds, RelCounter, ProfiledRead
 
 
 def load_count_dist(db_fname: str,
@@ -47,9 +47,9 @@ def load_count_dist(db_fname: str,
         count_freqs[int(kmer_count)] = int(freq)
     return (RelCounter(count_freqs) if not load_th
             else (RelCounter(count_freqs),
-                  StateThresholds(error_haplo=eh,
-                                  haplo_diplo=hd,
-                                  diplo_repeat=dr)))
+                  StateThresholds(error_haplo=int(eh),
+                                  haplo_diplo=int(hd),
+                                  diplo_repeat=int(dr))))
 
 
 def load_kmer_profile(db_fname: str,

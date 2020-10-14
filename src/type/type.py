@@ -3,9 +3,6 @@ from typing import Optional, List, NamedTuple
 from collections import Counter
 from BITS.seq.io import SeqRecord
 
-# Labels for 4-class annotation
-KMER_STATES = "EHDR"
-
 
 class StateThresholds(NamedTuple):
     """For naive classification."""
@@ -32,7 +29,11 @@ class ProfiledRead(SeqRecord):
       @ states : Label (E/H/D/R) for each k-mer.
     """
     counts: List[int]
-    states: Optional[str] = None
+    states: List[str] = None
+
+    def __post_init__(self):
+        assert len(self.seq) == len(self.counts), \
+            "Inconsistent length between sequence and counts"
 
     def __repr__(self) -> str:
         return self._order_repr(["states", "counts", "seq"])
