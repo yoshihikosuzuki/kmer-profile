@@ -34,6 +34,6 @@ def gen_fig_count_dist(counts: Union[Union[Counter, RelCounter],
                              y_title=("Frequency" if not relative
                                       else "Relative frequency [%]"),
                              barmode="overlay")
-    if layout is None:
+    if layout is not None:
         _layout = pl.merge_layout(_layout, layout, overwrite=True)
     return go.Figure(data=traces, layout=_layout)

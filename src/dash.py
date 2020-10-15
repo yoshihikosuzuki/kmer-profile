@@ -12,7 +12,7 @@ from dash.exceptions import PreventUpdate
 from .type import RelCounter, ProfiledRead
 from .io import load_count_dist, load_kmer_profile
 from .classifier.heuristics import run_heuristics
-from .visualizer import gen_fig_profiled_read
+from .visualizer import gen_fig_profiled_read, gen_fig_count_dist
 
 pio.templates.default = 'plotly_white'
 app = dash.Dash(__name__,
@@ -23,7 +23,6 @@ app = dash.Dash(__name__,
 class Cache:
     """Cache for data that are needed to be shared over multiple operations."""
     count_global: Optional[RelCounter] = None
-    trace_hist_global: Optional[go.Bar] = None
     read: Optional[ProfiledRead] = None
 
 
@@ -61,28 +60,28 @@ def update_count_dist(n_clicks_dist: int,
         cache.count_global = load_count_dist(db_fname, max_count)
         if cache.count_global is None:
             raise PreventUpdate
-        cache.trace_hist_global = pl.make_hist(cache.count_global.relative(),
-                                               bin_size=1,
-                                               col="gray",
-                                               name="All reads",
-                                               show_legend=True)
-        return go.Figure(data=cache.trace_hist_global,
-                         layout=pl.merge_layout(fig["layout"],
-                                                pl.make_layout(x_range=None,
-                                                               y_range=None),
-                                                overwrite=True))
+        return gen_fig_count_dist(cache.count_global,
+                                  "All reads",
+                                  "gray",
+                                  relative=True,
+                                  layout=pl.merge_layout(
+                                      fig["layout"] if "layout" in fig else None,
+                                      pl.make_layout(x_range=None, y_range=None)))
     elif ctx.triggered[0]["prop_id"] == "submit-profile.n_clicks":
         read = load_kmer_profile(db_fname, int(read_id))
         if read is None:
             raise PreventUpdate
-        trace_hist_read = pl.make_hist(read.count_freqs(max_count).relative(),
-                                       bin_size=1,
-                                       col="turquoise",
-                                       opacity=0.7,
-                                       name=f"Read {read_id}",
-                                       show_legend=True)
-        return go.Figure(data=[cache.trace_hist_global, trace_hist_read],
-                         layout=fig["layout"])
+        return gen_fig_count_dist([cache.count_global,
+                                   read.count_freqs(max_count)],
+                                  ["All reads",
+                                   f"Read {read.id}"],
+                                  ["gray",
+                                   "turquoise"],
+                                  relative=True,
+                                  layout=pl.merge_layout(
+                                      fig["layout"] if "layout" in fig else None,
+                                      pl.make_layout(x_range=None, y_range=None)))
+    raise PreventUpdate
 
 
 ### ----------------------------------------------------------------------- ###
@@ -114,7 +113,9 @@ def update_kmer_profile(n_clicks_profile: int,
         if cache.read is None:
             raise PreventUpdate
         return gen_fig_profiled_read(cache.read, K,
-                                     layout=fig["layout"] if "layout" in fig else None)
+                                     layout=pl.merge_layout(
+                                         fig["layout"] if "layout" in fig else None,
+                                         pl.make_layout(x_range=None, y_range=None)))
     elif ctx.triggered[0]["prop_id"] == "submit-classify.n_clicks":
         if cache.read is None:
             raise PreventUpdate
@@ -147,10 +148,7 @@ def main():
         dcc.Graph(id='fig-dist',
                   figure=go.Figure(
                       layout=pl.make_layout(width=800,
-                                            height=400,
-                                            x_title="K-mer count",
-                                            y_title="Relative frequency [%]",
-                                            barmode="overlay")),
+                                            height=400)),
                   config=dict(toImageButtonOptions=dict(format=args.download_as))),
         html.Div(["Read ID: ",
                   dcc.Input(id='read-id',

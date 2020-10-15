@@ -43,7 +43,7 @@ def gen_fig_profiled_read(read: ProfiledRead,
             for state, pos_list in state_pos.items()]
     _layout = pl.make_layout(x_title="Position",
                              y_title="Count")
-    if layout is None:
+    if layout is not None:
         _layout = pl.merge_layout(_layout, layout, overwrite=True)
     fig = go.Figure(data=traces, layout=_layout)
     fig.update_layout(updatemenus=[
