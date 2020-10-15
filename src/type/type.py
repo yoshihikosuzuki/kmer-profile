@@ -28,6 +28,7 @@ class ProfiledRead(SeqRecord):
       @ counts : Count profile.
       @ states : Label (E/H/D/R) for each k-mer.
     """
+    id: int
     counts: List[int]
     states: List[str] = None
 

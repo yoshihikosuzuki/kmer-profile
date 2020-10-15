@@ -82,5 +82,6 @@ def load_kmer_profile(db_fname: str,
             pos = int(pos[:-1])
             bases[pos] = base
             counts[pos] = int(count)
-    return ProfiledRead(seq=''.join(bases),
+    return ProfiledRead(id=read_id,
+                        seq=''.join(bases),
                         counts=counts)
