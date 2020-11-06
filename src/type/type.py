@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from typing import Optional, List, NamedTuple
 from collections import Counter
-from BITS.seq.io import SeqRecord
+from bits.seq import SeqRecord
 
 
 class StateThresholds(NamedTuple):

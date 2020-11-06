@@ -1,7 +1,7 @@
 import os
 from typing import Union, Optional, Tuple
 from collections import Counter
-from BITS.util.proc import run_command
+from bits.util import run_command
 from ..type import StateThresholds, RelCounter, ProfiledRead
 
 
