@@ -21,7 +21,7 @@ class ProfiledReadVisualizer:
                          pread: ProfiledRead,
                          col: str = "black",
                          name: str = "Counts",
-                         show_legend: bool = True) -> None:
+                         show_legend: bool = True) -> ProfiledReadVisualizer:
         self.traces.append(
             pl.make_scatter(
                 x=list(range(pread.length)),
@@ -33,13 +33,14 @@ class ProfiledReadVisualizer:
                 col=col,
                 name=name,
                 show_legend=show_legend))
+        return self
 
     def add_trace_bases(self,
                         pread: ProfiledRead,
                         col: str = "black",
                         name: str = "Bases",
                         show_legend: bool = True,
-                        show_init: bool = False) -> None:
+                        show_init: bool = False) -> ProfiledReadVisualizer:
         self.traces.append(
             pl.make_scatter(x=list(range(pread.length)),
                             y=pread.counts,
@@ -49,11 +50,12 @@ class ProfiledReadVisualizer:
                             name=name,
                             show_legend=show_legend,
                             show_init=show_init))
+        return self
 
     def add_trace_states(self,
                          pread: ProfiledRead,
                          show_legend: bool = True,
-                         show_init: bool = False) -> None:
+                         show_init: bool = False) -> ProfiledReadVisualizer:
         assert len(pread.states) == pread.length
         state_pos = defaultdict(list)
         for i, s in enumerate(pread.states):
@@ -69,6 +71,7 @@ class ProfiledReadVisualizer:
                              show_legend=show_legend,
                              show_init=show_init)
              for state, pos_list in state_pos.items()]
+        return self
 
     def show(self,
              layout: Optional[go.Layout] = None,

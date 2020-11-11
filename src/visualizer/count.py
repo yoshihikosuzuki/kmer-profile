@@ -40,6 +40,7 @@ class CountDistVisualizer:
                         opacity=opacity,
                         name=name,
                         show_legend=True))
+        return self
 
     def show(self,
              layout: Optional[go.Layout] = None,
