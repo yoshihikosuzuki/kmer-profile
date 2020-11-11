@@ -9,10 +9,10 @@ import dash_html_components as html
 import dash_core_components as dcc
 from dash.dependencies import Input, Output, State
 from dash.exceptions import PreventUpdate
-from .type import RelCounter, ProfiledRead
-from .io import load_count_dist, load_kmer_profile
+from bits.util import RelCounter
+from .type import ProfiledRead
 from .classifier.heuristics import run_heuristics
-from .visualizer import gen_fig_profiled_read, gen_fig_count_dist
+from .visualizer import CountDistVisualizer, ProfiledReadVisualizer
 
 pio.templates.default = 'plotly_white'
 app = dash.Dash(__name__,
@@ -112,16 +112,16 @@ def update_kmer_profile(n_clicks_profile: int,
         cache.read = load_kmer_profile(db_fname, int(read_id))
         if cache.read is None:
             raise PreventUpdate
-        return gen_fig_profiled_read(cache.read, K,
-                                     layout=pl.merge_layout(
-                                         fig["layout"] if "layout" in fig else None,
-                                         pl.make_layout(x_range=None, y_range=None)))
+        return gen_fig_preads(cache.read, K,
+                              layout=pl.merge_layout(
+                                  fig["layout"] if "layout" in fig else None,
+                                  pl.make_layout(x_range=None, y_range=None)))
     elif ctx.triggered[0]["prop_id"] == "submit-classify.n_clicks":
         if cache.read is None:
             raise PreventUpdate
         # run_heuristics(cache.read, K)
-        return gen_fig_profiled_read(cache.read, K,
-                                     layout=fig["layout"] if "layout" in fig else None)
+        return gen_fig_preads(cache.read, K,
+                              layout=fig["layout"] if "layout" in fig else None)
     raise PreventUpdate
 
 

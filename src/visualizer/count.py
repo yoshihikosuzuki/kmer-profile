@@ -1,3 +1,5 @@
+from __future__ import annotations
+from dataclasses import dataclass, field
 from typing import Union, Optional, Sequence, List
 from collections import defaultdict, Counter
 import plotly.graph_objects as go
@@ -5,35 +7,52 @@ import plotly_light as pl
 from bits.util import RelCounter
 
 
-def gen_fig_count_dist(counts: Union[Union[Counter, RelCounter],
-                                     List[Union[Counter, RelCounter]]],
-                       names: Union[str, List[str]],
-                       cols: Optional[Union[str, List[str]]] = None,
-                       relative: bool = False,
-                       layout: Optional[go.Layout] = None) -> go.Figure:
-    if not isinstance(counts, list):
-        counts = [counts]
-    if not isinstance(names, list):
-        names = [names]
-    assert len(counts) == len(names), "Inconsistent lengths"
-    if cols is not None:
-        if not isinstance(cols, list):
-            cols = [cols]
-        assert len(counts) == len(cols), "Inconsistent lengths"
-    traces = []
-    for i, (count, name) in enumerate(zip(counts, names)):
-        if relative and not isinstance(count, RelCounter):
-            count = RelCounter(count)
-        traces.append(pl.make_hist(count if not relative else count.relative(),
-                                   bin_size=1,
-                                   col=cols[i] if cols is not None else None,
-                                   opacity=1 if i == 0 else 0.7,
-                                   name=name,
-                                   show_legend=True))
-    _layout = pl.make_layout(x_title="K-mer count",
-                             y_title=("Frequency" if not relative
-                                      else "Relative frequency [%]"),
-                             barmode="overlay")
-    if layout is not None:
-        _layout = pl.merge_layout(_layout, layout, overwrite=True)
-    return go.Figure(data=traces, layout=_layout)
+@dataclass
+class CountDistVisualizer:
+    relative: bool = False
+    show_legend: bool = True
+    traces: pl.Traces = field(default_factory=list)
+
+    def __post_init__(self):
+        if not isinstance(self.traces, list):
+            self.traces = [self.traces]
+
+    def add_trace(self,
+                  count_freqs: Union[Counter, RelCounter],
+                  col: Optional[str] = None,
+                  opacity: float = 1,
+                  name: Optional[str] = None) -> CountDistVisualizer:
+        """
+        positional arguments:
+          @ count_freqs : Count distribution.
+
+        optional arguments:
+          @ col         : Of histogram.
+          @ opacity     : Of histogram color.
+                          (1 for primary and 0.7 for secondary are recommended.)
+          @ name        : For plot.
+        """
+        self.traces.append(
+            pl.make_hist((lambda x: x.relative() if self.relative else x)
+                        (RelCounter(count_freqs)),
+                        bin_size=1,
+                        col=col,
+                        opacity=opacity,
+                        name=name,
+                        show_legend=True))
+
+    def show(self,
+             layout: Optional[go.Layout] = None,
+             return_fig: bool = False) -> Optional[go.Figure]:
+        """
+        optional arguments:
+          @ layout     : Any additional layouts.
+          @ return_fig : If True, return go.Figure object.
+        """
+        _layout = pl.make_layout(x_title="K-mer count",
+                                 y_title=("Frequency" if not self.relative
+                                          else "Relative frequency [%]"),
+                                 barmode="overlay")
+        fig = pl.make_figure(self.traces,
+                             pl.merge_layout(_layout, layout))
+        return fig if return_fig else pl.show(fig)

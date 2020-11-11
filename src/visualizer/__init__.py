@@ -1,2 +1,2 @@
-from .profile import gen_fig_profiled_read
-from .count import gen_fig_count_dist
+from .count import CountDistVisualizer
+from .profile import ProfiledReadVisualizer
