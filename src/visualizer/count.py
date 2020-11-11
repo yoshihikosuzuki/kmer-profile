@@ -2,7 +2,7 @@ from typing import Union, Optional, Sequence, List
 from collections import defaultdict, Counter
 import plotly.graph_objects as go
 import plotly_light as pl
-from ..type import RelCounter
+from bits.util import RelCounter
 
 
 def gen_fig_count_dist(counts: Union[Union[Counter, RelCounter],

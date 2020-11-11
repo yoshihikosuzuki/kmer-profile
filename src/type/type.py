@@ -1,22 +1,7 @@
 from dataclasses import dataclass
 from typing import Optional, List, NamedTuple
-from collections import Counter
 from bits.seq import SeqRecord
-
-
-class StateThresholds(NamedTuple):
-    """For naive classification."""
-    error_haplo: int
-    haplo_diplo: int
-    diplo_repeat: int
-
-
-class RelCounter(Counter):
-    """Subclass of Counter with a method returning the relative frequencies."""
-
-    def relative(self):
-        tot = sum(self.values())
-        return {k: v / tot * 100 for k, v in self.items()}
+from bits.util import RelCounter
 
 
 @dataclass
@@ -25,10 +10,15 @@ class ProfiledRead(SeqRecord):
 
     positional arguments:
       @ seq    : Bases of the read.
+      @ id     : Read ID.
+      @ K      : Of k-mers.
       @ counts : Count profile.
+
+    optional arguments:
       @ states : Label (E/H/D/R) for each k-mer.
     """
     id: int
+    K: int
     counts: List[int]
     states: List[str] = None
 
@@ -37,7 +27,7 @@ class ProfiledRead(SeqRecord):
             "Inconsistent length between sequence and counts"
 
     def __repr__(self) -> str:
-        return self._order_repr(["states", "counts", "seq"])
+        return self._order_repr(["K", "id", "counts", "states", "seq"])
 
     def count_freqs(self,
                     max_count: Optional[int] = None) -> RelCounter:
