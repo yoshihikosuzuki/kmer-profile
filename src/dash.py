@@ -1,4 +1,5 @@
 import argparse
+from copy import deepcopy
 from dataclasses import dataclass
 from typing import Optional
 import plotly.io as pio
@@ -63,7 +64,7 @@ def update_count_dist(n_clicks_dist: int,
     if (not ctx.triggered
             or ctx.triggered[0]["prop_id"] == "submit-dist.n_clicks"):
         # Draw the global k-mer count distribution from all reads
-        count_global = fastk.histex(f"{cache.args.fastk_prefix}.K{cache.args.k}",
+        count_global = fastk.histex(cache.args.fastk_prefix,
                                     max_count=max_count)
         if count_global is None:
             raise PreventUpdate
@@ -82,13 +83,13 @@ def update_count_dist(n_clicks_dist: int,
                            cache.args.k)
         if pread is None:
             raise PreventUpdate
-        return (cache.cdv.add_trace(pread.count_freqs(max_count),
-                                    col="turquoise",
-                                    opacity=0.7,
-                                    name=f"Read {read_id}")
+        return (deepcopy(cache.cdv)
+                .add_trace(pread.count_freqs(max_count),
+                           col="turquoise",
+                           opacity=0.7,
+                           name=f"Read {read_id}")
                 .show(layout=reset_axes(fig),
                       return_fig=True))
-
     raise PreventUpdate
 
 
@@ -131,7 +132,8 @@ def update_kmer_profile(n_clicks_profile: int,
         if cache.pread is None or cache.prv is None:
             raise PreventUpdate
         # run_heuristics(cache.read, K)
-        return (cache.prv.add_trace_states(cache.pread)
+        return (deepcopy(cache.prv)
+                .add_trace_states(cache.pread)
                 .show(layout=reset_axes(fig),
                       return_fig=True))
     raise PreventUpdate
