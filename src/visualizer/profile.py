@@ -3,7 +3,6 @@ from dataclasses import dataclass, field
 from typing import Union, Optional, Sequence, List
 from collections import defaultdict
 import plotly.graph_objects as go
-from plotly.basedatatypes import BaseTraceType
 import plotly_light as pl
 from ..type import STATES, STATE_TO_COL, ProfiledRead
 
@@ -11,6 +10,7 @@ from ..type import STATES, STATE_TO_COL, ProfiledRead
 @dataclass
 class ProfiledReadVisualizer:
     show_legend: bool = True
+    use_webgl: bool = True
     traces: pl.Traces = field(default_factory=list)
 
     def __post_init__(self):
@@ -22,8 +22,8 @@ class ProfiledReadVisualizer:
                          col: str = "black",
                          name: str = "Counts",
                          show_legend: bool = True) -> ProfiledReadVisualizer:
-        self.traces.append(
-            pl.make_scatter(
+        self.traces += \
+            [pl.make_scatter(
                 x=list(range(pread.length)),
                 y=pread.counts,
                 text=[f"pos = {i}<br>count = {c}<br>"
@@ -32,7 +32,20 @@ class ProfiledReadVisualizer:
                 mode="lines",
                 col=col,
                 name=name,
-                show_legend=show_legend))
+                show_legend=show_legend,
+                use_webgl=self.use_webgl),
+             pl.make_scatter(
+                x=list(range(pread.length)),
+                y=pread.counts,
+                text=[f"pos = {i}<br>count = {c}<br>"
+                      f"k-mer = {pread.seq[i - pread.K + 1:i + 1] if i >= pread.K - 1 else '-'}"
+                      for i, c in enumerate(pread.counts)],
+                mode="markers",
+                col=col,
+                name=name,
+                show_legend=show_legend,
+                show_init=False,
+                use_webgl=self.use_webgl)]
         return self
 
     def add_trace_bases(self,
@@ -49,7 +62,8 @@ class ProfiledReadVisualizer:
                             mode="text",
                             name=name,
                             show_legend=show_legend,
-                            show_init=show_init))
+                            show_init=show_init,
+                            use_webgl=self.use_webgl))
         return self
 
     def add_trace_states(self,
@@ -69,7 +83,8 @@ class ProfiledReadVisualizer:
                              col=STATE_TO_COL[state],
                              name=state,
                              show_legend=show_legend,
-                             show_init=show_init)
+                             show_init=show_init,
+                             use_webgl=self.use_webgl)
              for state, pos_list in state_pos.items()]
         return self
 
@@ -85,10 +100,10 @@ class ProfiledReadVisualizer:
                                  y_title="Count")
         fig = pl.make_figure(self.traces,
                              pl.merge_layout(_layout, layout))
-        fig.update_layout(updatemenus=[
-            dict(type="buttons",
-                 buttons=[dict(label="<100",
-                               method="relayout",
-                               args=[{"yaxis.range[0]": 0,
-                                      "yaxis.range[1]": 100}])])])
+        fig.update_layout(
+            updatemenus=[dict(type="buttons",
+                              buttons=[dict(label="<100",
+                                            method="relayout",
+                                            args=[{"yaxis.range[0]": 0,
+                                                   "yaxis.range[1]": 100}])])])
         return fig if return_fig else pl.show(fig)

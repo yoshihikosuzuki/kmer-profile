@@ -20,7 +20,7 @@ class ProfiledRead(SeqRecord):
     id: int
     K: int
     counts: List[int]
-    states: List[str] = None
+    states: Optional[List[str]] = None
 
     def __post_init__(self):
         assert len(self.seq) == len(self.counts), \

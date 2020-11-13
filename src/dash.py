@@ -10,7 +10,9 @@ import dash_core_components as dcc
 from dash.dependencies import Input, Output, State
 from dash.exceptions import PreventUpdate
 from bits.util import RelCounter
+import fastk
 from .type import ProfiledRead
+from .io import load_pread
 from .classifier.heuristics import run_heuristics
 from .visualizer import CountDistVisualizer, ProfiledReadVisualizer
 
@@ -22,13 +24,19 @@ app = dash.Dash(__name__,
 @dataclass(repr=False, eq=False)
 class Cache:
     """Cache for data that are needed to be shared over multiple operations."""
-    count_global: Optional[RelCounter] = None
-    read: Optional[ProfiledRead] = None
+    args: argparse.Namespace = None
+    cdv: Optional[CountDistVisualizer] = None
+    pread: Optional[ProfiledRead] = None
+    prv: Optional[ProfiledReadVisualizer] = None
 
 
 cache = Cache()
 
-K = 40   # TODO: change to an input
+
+def reset_axes(fig: go.Figure) -> go.Layout:
+    """Return the layout of the figure with reset axes."""
+    return pl.merge_layout(fig["layout"] if "layout" in fig else None,
+                           pl.make_layout(x_range=None, y_range=None))
 
 ### ----------------------------------------------------------------------- ###
 ###                        k-mer count distribution                         ###
@@ -39,14 +47,12 @@ K = 40   # TODO: change to an input
     Output('fig-dist', 'figure'),
     [Input('submit-dist', 'n_clicks'),
      Input('submit-profile', 'n_clicks')],
-    [State('db-fname', 'value'),
-     State('read-id', 'value'),
+    [State('read-id', 'value'),
      State('max-count-dist', 'value'),
      State('fig-dist', 'figure')]
 )
 def update_count_dist(n_clicks_dist: int,
                       n_clicks_profile: int,
-                      db_fname: str,
                       read_id: int,
                       max_count: int,
                       fig: go.Figure) -> go.Figure:
@@ -57,30 +63,32 @@ def update_count_dist(n_clicks_dist: int,
     if (not ctx.triggered
             or ctx.triggered[0]["prop_id"] == "submit-dist.n_clicks"):
         # Draw the global k-mer count distribution from all reads
-        cache.count_global = load_count_dist(db_fname, max_count)
-        if cache.count_global is None:
+        count_global = fastk.histex(f"{cache.args.fastk_prefix}.K{cache.args.k}",
+                                    max_count=max_count)
+        if count_global is None:
             raise PreventUpdate
-        return gen_fig_count_dist(cache.count_global,
-                                  "All reads",
-                                  "gray",
-                                  relative=True,
-                                  layout=pl.merge_layout(
-                                      fig["layout"] if "layout" in fig else None,
-                                      pl.make_layout(x_range=None, y_range=None)))
+        cache.cdv = (CountDistVisualizer(relative=True)
+                     .add_trace(count_global,
+                                col="gray",
+                                opacity=1,
+                                name="All reads"))
+        return cache.cdv.show(layout=reset_axes(fig),
+                              return_fig=True)
     elif ctx.triggered[0]["prop_id"] == "submit-profile.n_clicks":
-        read = load_kmer_profile(db_fname, int(read_id))
-        if read is None:
+        read_id = int(read_id)
+        pread = load_pread(cache.args.db_fname,
+                           cache.args.fastk_prefix,
+                           read_id,
+                           cache.args.k)
+        if pread is None:
             raise PreventUpdate
-        return gen_fig_count_dist([cache.count_global,
-                                   read.count_freqs(max_count)],
-                                  ["All reads",
-                                   f"Read {read.id}"],
-                                  ["gray",
-                                   "turquoise"],
-                                  relative=True,
-                                  layout=pl.merge_layout(
-                                      fig["layout"] if "layout" in fig else None,
-                                      pl.make_layout(x_range=None, y_range=None)))
+        return (cache.cdv.add_trace(pread.count_freqs(max_count),
+                                    col="turquoise",
+                                    opacity=0.7,
+                                    name=f"Read {read_id}")
+                .show(layout=reset_axes(fig),
+                      return_fig=True))
+
     raise PreventUpdate
 
 
@@ -89,17 +97,15 @@ def update_count_dist(n_clicks_dist: int,
 ### ----------------------------------------------------------------------- ###
 
 
-@app.callback(
+@ app.callback(
     Output('fig-profile', 'figure'),
     [Input('submit-profile', 'n_clicks'),
      Input('submit-classify', 'n_clicks')],
-    [State('db-fname', 'value'),
-     State('read-id', 'value'),
+    [State('read-id', 'value'),
      State('fig-profile', 'figure')]
 )
 def update_kmer_profile(n_clicks_profile: int,
                         n_clicks_classify: int,
-                        db_fname: str,
                         read_id: int,
                         fig: go.Figure) -> go.Figure:
     """Update the count profile plot."""
@@ -109,19 +115,25 @@ def update_kmer_profile(n_clicks_profile: int,
         raise PreventUpdate
     if ctx.triggered[0]["prop_id"] == "submit-profile.n_clicks":
         # Draw a k-mer count profile from scratch
-        cache.read = load_kmer_profile(db_fname, int(read_id))
-        if cache.read is None:
+        cache.pread = load_pread(cache.args.db_fname,
+                                 cache.args.fastk_prefix,
+                                 int(read_id),
+                                 cache.args.k)
+        if cache.pread is None:
             raise PreventUpdate
-        return gen_fig_preads(cache.read, K,
-                              layout=pl.merge_layout(
-                                  fig["layout"] if "layout" in fig else None,
-                                  pl.make_layout(x_range=None, y_range=None)))
+        cache.prv = (ProfiledReadVisualizer()
+                     .add_trace_counts(cache.pread,
+                                       name="Normal")
+                     .add_trace_bases(cache.pread))
+        return cache.prv.show(layout=reset_axes(fig),
+                              return_fig=True)
     elif ctx.triggered[0]["prop_id"] == "submit-classify.n_clicks":
-        if cache.read is None:
+        if cache.pread is None or cache.prv is None:
             raise PreventUpdate
         # run_heuristics(cache.read, K)
-        return gen_fig_preads(cache.read, K,
-                              layout=fig["layout"] if "layout" in fig else None)
+        return (cache.prv.add_trace_states(cache.pread)
+                .show(layout=reset_axes(fig),
+                      return_fig=True))
     raise PreventUpdate
 
 
@@ -131,12 +143,9 @@ def update_kmer_profile(n_clicks_profile: int,
 
 
 def main():
-    args = parse_args()
+    # TODO: check availavility of commands required afterwards
+    parse_args()
     app.layout = html.Div(children=[
-        html.Div(["DB file: ",
-                  dcc.Input(id='db-fname',
-                            value=args.input_db,
-                            type='text')]),
         html.Div([html.Button(id='submit-dist',
                               n_clicks=0,
                               children='Draw k-mer count distribution'),
@@ -149,7 +158,7 @@ def main():
                   figure=go.Figure(
                       layout=pl.make_layout(width=800,
                                             height=400)),
-                  config=dict(toImageButtonOptions=dict(format=args.download_as))),
+                  config=dict(toImageButtonOptions=dict(format=cache.args.download_as))),
         html.Div(["Read ID: ",
                   dcc.Input(id='read-id',
                             value='',
@@ -164,20 +173,28 @@ def main():
                   figure=go.Figure(
                       layout=pl.make_layout(width=1800,
                                             height=500)),
-                  config=dict(toImageButtonOptions=dict(format=args.download_as)))
+                  config=dict(toImageButtonOptions=dict(format=cache.args.download_as)))
     ])
-    app.run_server(debug=args.debug_mode)
+    app.run_server(debug=cache.args.debug_mode)
 
 
 def parse_args() -> argparse.Namespace:
+    global cache
     parser = argparse.ArgumentParser(
         description="Visualizations for k-mer analysis")
     parser.add_argument(
-        "-i",
-        "--input_db",
+        "db_fname",
         type=str,
-        default="",
-        help="Input DAZZ_DB file name.")
+        help="DAZZ_DB file name.")
+    parser.add_argument(
+        "fastk_prefix",
+        type=str,
+        help="Prefix of the FastK output files.")
+    parser.add_argument(
+        "-k",
+        type=int,
+        default=40,
+        help="The value of K for K-mers.")
     parser.add_argument(
         "-f",
         "--download_as",
@@ -189,8 +206,7 @@ def parse_args() -> argparse.Namespace:
         "--debug_mode",
         action="store_true",
         help="Run a Dash server in a debug mode.")
-    args = parser.parse_args()
-    return args
+    cache.args = parser.parse_args()
 
 
 if __name__ == '__main__':
