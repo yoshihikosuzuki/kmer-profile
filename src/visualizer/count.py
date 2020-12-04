@@ -10,7 +10,11 @@ from bits.util import RelCounter
 @dataclass
 class CountDistVisualizer:
     relative: bool = False
+    width: Optional[int] = None
+    height: Optional[int] = None
+    barmode: str = "overlay"
     show_legend: bool = True
+    use_histogram: bool = False
     traces: pl.Traces = field(default_factory=list)
 
     def __post_init__(self):
@@ -34,12 +38,13 @@ class CountDistVisualizer:
         """
         self.traces.append(
             pl.make_hist((lambda x: x.relative() if self.relative else x)
-                        (RelCounter(count_freqs)),
-                        bin_size=1,
-                        col=col,
-                        opacity=opacity,
-                        name=name,
-                        show_legend=True))
+                         (RelCounter(count_freqs)),
+                         bin_size=1,
+                         col=col,
+                         opacity=opacity,
+                         name=name,
+                         show_legend=self.show_legend,
+                         use_histogram=self.use_histogram))
         return self
 
     def show(self,
@@ -50,10 +55,12 @@ class CountDistVisualizer:
           @ layout     : Any additional layouts.
           @ return_fig : If True, return go.Figure object.
         """
-        _layout = pl.make_layout(x_title="K-mer count",
+        _layout = pl.make_layout(width=self.width,
+                                 height=self.height,
+                                 x_title="K-mer count",
                                  y_title=("Frequency" if not self.relative
                                           else "Relative frequency [%]"),
-                                 barmode="overlay")
+                                 barmode=self.barmode)
         fig = pl.make_figure(self.traces,
-                             pl.merge_layout(_layout, layout))
+                             pl.merge_layout(layout, _layout))
         return fig if return_fig else pl.show(fig)

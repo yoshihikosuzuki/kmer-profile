@@ -10,7 +10,6 @@ import dash_html_components as html
 import dash_core_components as dcc
 from dash.dependencies import Input, Output, State
 from dash.exceptions import PreventUpdate
-from bits.util import RelCounter
 from .type import ProfiledRead
 from .io import load_histex, load_pread
 from .classifier.heuristics import run_heuristics
@@ -65,9 +64,9 @@ def update_count_dist(n_clicks_dist: int,
             or ctx.triggered[0]["prop_id"] == "submit-dist.n_clicks"):
         # Draw the global k-mer count distribution from all reads
         count_global = load_histex(cache.args.fastk_prefix,
-                                    max_count=max_count)
+                                   max_count=max_count)
         count_global_hoco = load_histex(cache.args.fastk_prefix_hoco,
-                                         max_count=max_count)
+                                        max_count=max_count)
         if count_global is None or count_global_hoco is None:
             raise PreventUpdate
         cache.cdv = (CountDistVisualizer(relative=True)
@@ -76,7 +75,7 @@ def update_count_dist(n_clicks_dist: int,
                                 opacity=1,
                                 name="Global (normal)")
                      .add_trace(count_global_hoco,
-                                col="orange",
+                                col=cache.args.color_hoco,
                                 opacity=0.7,
                                 name="Global (hoco)"))
         return cache.cdv.show(layout=reset_axes(fig),
@@ -122,20 +121,25 @@ def update_kmer_profile(n_clicks_profile: int,
         raise PreventUpdate
     if ctx.triggered[0]["prop_id"] == "submit-profile.n_clicks":
         # Draw a k-mer count profile from scratch
-        cache.pread, cache.pread_hoco = load_pread(cache.args.db_fname,
-                                                   cache.args.fastk_prefix,
-                                                   int(read_id),
-                                                   cache.args.k,
-                                                   cache.args.fastk_prefix_hoco)
-        if cache.pread is None or cache.pread_hoco is None:
+        cache.pread = load_pread(cache.args.db_fname,
+                                 cache.args.fastk_prefix,
+                                 int(read_id),
+                                 cache.args.k,
+                                 cache.args.fastk_prefix_hoco)
+        if cache.pread is None:
             raise PreventUpdate
+        if cache.args.fastk_prefix_hoco is not None:
+            cache.preead, cache.pread_hoco = cache.pread
+            if cache.pread is None or cache.pread_hoco is None:
+                raise PreventUpdate
         cache.prv = (ProfiledReadVisualizer()
                      .add_trace_counts(cache.pread,
-                                       name="Normal")
-                     .add_trace_counts(cache.pread_hoco,
-                                       col="orange",
-                                       name="Hoco")
-                     .add_trace_bases(cache.pread_hoco))
+                                       name="Normal"))
+        if cache.args.fastk_prefix_hoco is not None:
+            cache.prv.add_trace_counts(cache.pread_hoco,
+                                       col=cache.args.color_hoco,
+                                       name="Hoco") \
+                .add_trace_bases(cache.pread_hoco)
         return cache.prv.show(layout=reset_axes(fig),
                               return_fig=True)
     elif ctx.triggered[0]["prop_id"] == "submit-classify.n_clicks":
@@ -181,6 +185,7 @@ def main():
         html.Div([html.Button(id='submit-classify',
                               n_clicks=0,
                               children='Classify k-mers')]),
+        # TODO: "download_html" button?
         dcc.Graph(id='fig-profile',
                   figure=go.Figure(
                       layout=pl.make_layout(width=1800,
@@ -204,7 +209,9 @@ def parse_args() -> argparse.Namespace:
         help="Prefix of the FastK output files.")
     parser.add_argument(
         "fastk_prefix_hoco",
-        type=str,
+        nargs='?',
+        type=Optional[str],
+        default=None,
         help="Prefix of the FastK output files for HoCo profiles.")
     parser.add_argument(
         "-k",
@@ -217,6 +224,12 @@ def parse_args() -> argparse.Namespace:
         type=str,
         default="svg",
         help="File format of the image downloaed via the icon.")
+    parser.add_argument(
+        "-c",
+        "--color_hoco",
+        type=str,
+        default="darkorange",
+        help="Color for hoco plots.")
     parser.add_argument(
         "-d",
         "--debug_mode",
