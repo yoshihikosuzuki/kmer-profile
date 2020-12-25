@@ -1,7 +1,7 @@
 import argparse
 from copy import deepcopy
 from dataclasses import dataclass
-from typing import Optional
+from typing import Optional, List
 import plotly.io as pio
 import plotly.graph_objects as go
 import plotly_light as pl
@@ -10,8 +10,10 @@ import dash_html_components as html
 import dash_core_components as dcc
 from dash.dependencies import Input, Output, State
 from dash.exceptions import PreventUpdate
+from bits.seq import load_db
+from bits.util import RelCounter
+import fastk
 from .type import ProfiledRead
-from .io import load_histex, load_pread
 from .classifier.heuristics import run_heuristics
 from .visualizer import CountDistVisualizer, ProfiledReadVisualizer
 
@@ -62,34 +64,27 @@ def update_count_dist(n_clicks_dist: int,
     max_count = int(max_count)
     if (not ctx.triggered
             or ctx.triggered[0]["prop_id"] == "submit-dist.n_clicks"):
-        # Draw the global k-mer count distribution from all reads
-        count_global = load_histex(cache.args.fastk_prefix,
-                                   max_count=max_count)
-        count_global_hoco = load_histex(cache.args.fastk_prefix_hoco,
-                                        max_count=max_count)
-        if count_global is None or count_global_hoco is None:
-            raise PreventUpdate
-        cache.cdv = (CountDistVisualizer(relative=True)
-                     .add_trace(count_global,
-                                col="gray",
-                                opacity=1,
-                                name="Global (normal)")
-                     .add_trace(count_global_hoco,
+        # Global k-mer count distribution
+        cache.cdv = CountDistVisualizer(relative=True)
+        cache.cdv.add_trace(fastk.histex(cache.args.fastk_prefix,
+                                         max_count=max_count),
+                            col="gray",
+                            opacity=1,
+                            name="Global (normal)")
+        if cache.args.fastk_prefix_hoco is not None:
+            cache.cdv.add_trace(fastk.histex(cache.args.fastk_prefix_hoco,
+                                             max_count=max_count),
                                 col=cache.args.color_hoco,
                                 opacity=0.7,
-                                name="Global (hoco)"))
+                                name="Global (hoco)")
         return cache.cdv.show(layout=reset_axes(fig),
                               return_fig=True)
     elif ctx.triggered[0]["prop_id"] == "submit-profile.n_clicks":
+        # Single-read k-mer count distribution
         read_id = int(read_id)
-        pread = load_pread(cache.args.db_fname,
-                           cache.args.fastk_prefix,
-                           read_id,
-                           cache.args.k)
-        if pread is None:
-            raise PreventUpdate
+        prof = fastk.profex(cache.args.fastk_prefix, read_id)
         return (deepcopy(cache.cdv)
-                .add_trace(pread.count_freqs(max_count),
+                .add_trace(RelCounter([min(c, max_count) for c in prof]),
                            col="turquoise",
                            opacity=0.7,
                            name=f"Read {read_id}")
@@ -103,7 +98,23 @@ def update_count_dist(n_clicks_dist: int,
 ### ----------------------------------------------------------------------- ###
 
 
-@ app.callback(
+def pullback_hoco(hoco_profile: List[int],
+                  normal_seq: str) -> List[int]:
+    """Project back hoco profile onto normal space.
+    """
+    assert hoco_profile[0] == 0, "Must have (K-1) 0-counts"
+    pb_profile = [None] * len(normal_seq)
+    i_normal = i_hoco = 0
+    pb_profile[i_normal] = hoco_profile[i_hoco]
+    for i_normal in range(1, len(normal_seq)):
+        if normal_seq[i_normal] != normal_seq[i_normal - 1]:
+            i_hoco += 1
+        pb_profile[i_normal] = hoco_profile[i_hoco]
+    assert i_hoco == len(hoco_profile) - 1, "Inconsistent lengths"
+    return pb_profile
+
+
+@app.callback(
     Output('fig-profile', 'figure'),
     [Input('submit-profile', 'n_clicks'),
      Input('submit-classify', 'n_clicks')],
@@ -117,35 +128,45 @@ def update_kmer_profile(n_clicks_profile: int,
     """Update the count profile plot."""
     global cache
     ctx = dash.callback_context
+    read_id = int(read_id)
     if not ctx.triggered:
         raise PreventUpdate
     if ctx.triggered[0]["prop_id"] == "submit-profile.n_clicks":
         # Draw a k-mer count profile from scratch
-        cache.pread = load_pread(cache.args.db_fname,
-                                 cache.args.fastk_prefix,
-                                 int(read_id),
-                                 cache.args.k,
-                                 cache.args.fastk_prefix_hoco)
+        seq = load_db(cache.args.db_fname, read_id)
+        prof = fastk.profex(cache.args.fastk_prefix,
+                            read_id,
+                            cache.args.K)
+        cache.pread = ProfiledRead(seq=seq,
+                                   id=read_id,
+                                   K=cache.args.K,
+                                   counts=prof)
         if cache.pread is None:
             raise PreventUpdate
-        if cache.args.fastk_prefix_hoco is not None:
-            cache.preead, cache.pread_hoco = cache.pread
-            if cache.pread is None or cache.pread_hoco is None:
-                raise PreventUpdate
         cache.prv = (ProfiledReadVisualizer()
                      .add_trace_counts(cache.pread,
                                        name="Normal"))
         if cache.args.fastk_prefix_hoco is not None:
+            prof_hoco = pullback_hoco(fastk.profex(cache.args.fastk_prefix_hoco,
+                                                   read_id,
+                                                   cache.args.K),
+                                      seq)
+            cache.pread_hoco = ProfiledRead(seq=seq,
+                                            id=read_id,
+                                            K=cache.args.K,
+                                            counts=prof_hoco)
+            if cache.pread_hoco is None:
+                raise PreventUpdate
             cache.prv.add_trace_counts(cache.pread_hoco,
                                        col=cache.args.color_hoco,
-                                       name="Hoco") \
-                .add_trace_bases(cache.pread_hoco)
-        return cache.prv.show(layout=reset_axes(fig),
-                              return_fig=True)
+                                       name="Hoco")
+        cache.prv.add_trace_bases(cache.pread_hoco)
+        return (cache.prv.add_trace_bases(cache.pread_hoco)
+                .show(layout=reset_axes(fig),
+                      return_fig=True))
     elif ctx.triggered[0]["prop_id"] == "submit-classify.n_clicks":
         if cache.prv is None:
             raise PreventUpdate
-        # run_heuristics(cache.read, K)
         return (deepcopy(cache.prv)
                 .add_trace_states(cache.pread)
                 .show(layout=reset_axes(fig),

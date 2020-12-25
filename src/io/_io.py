@@ -5,32 +5,20 @@ from bits.util import RelCounter, run_command
 from ..type import ProfiledRead
 
 
-def load_histex(fastk_prefix: str,
-                min_count: int = 1,
-                max_count: int = 100) -> RelCounter:
-    if min_count != 1 or max_count != 100:
-        _min_count = f"{min_count}:" if min_count > 1 else ''
-        h_option = f"-h{_min_count}{max_count}"
-    else:
-        h_option = ''
-    command = f"Histex {h_option} {fastk_prefix}"
-    lines = run_command(command).strip().split('\n')
-    count_freqs = RelCounter()
-    for line in lines[5:]:
-        data = line.strip().split()
-        count_freqs[int(data[-3][:-1])] = int(data[-2])
-    return count_freqs
-
-
-def load_profex(fastk_prefix: str,
-                read_id: int) -> List[int]:
-    command = f"Profex {fastk_prefix} {read_id}"
-    lines = run_command(command).strip().split('\n')
-    counts = []
-    for line in lines[1:]:
-        _, count = line.strip().split()
-        counts.append(int(count))
-    return counts
+def pullback_hoco(hoco_profile: List[int],
+                  normal_seq: str) -> List[int]:
+    """Project back hoco profile onto normal space.
+    """
+    assert hoco_profile[0] == 0, "Must have (K-1) 0-counts"
+    pb_profile = [None] * len(normal_seq)
+    i_normal = i_hoco = 0
+    pb_profile[i_normal] = hoco_profile[i_hoco]
+    for i_normal in range(1, len(normal_seq)):
+        if normal_seq[i_normal] != normal_seq[i_normal - 1]:
+            i_hoco += 1
+        pb_profile[i_normal] = hoco_profile[i_hoco]
+    assert i_hoco == len(hoco_profile) - 1, "Inconsistent lengths"
+    return pb_profile
 
 
 def load_pread(db_fname: str,
