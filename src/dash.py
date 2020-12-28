@@ -2,6 +2,7 @@ import argparse
 from copy import deepcopy
 from dataclasses import dataclass
 from typing import Optional, List
+from logzero import logger
 import plotly.io as pio
 import plotly.graph_objects as go
 import plotly_light as pl
@@ -128,18 +129,19 @@ def update_kmer_profile(n_clicks_profile: int,
     """Update the count profile plot."""
     global cache
     ctx = dash.callback_context
-    read_id = int(read_id)
+    if read_id != "":
+        read_id = int(read_id)
     if not ctx.triggered:
         raise PreventUpdate
     if ctx.triggered[0]["prop_id"] == "submit-profile.n_clicks":
         # Draw a k-mer count profile from scratch
-        seq = load_db(cache.args.db_fname, read_id)
+        seq = load_db(cache.args.db_fname, read_id)[0].seq
         prof = fastk.profex(cache.args.fastk_prefix,
                             read_id,
-                            cache.args.K)
+                            cache.args.k)
         cache.pread = ProfiledRead(seq=seq,
                                    id=read_id,
-                                   K=cache.args.K,
+                                   K=cache.args.k,
                                    counts=prof)
         if cache.pread is None:
             raise PreventUpdate
@@ -149,19 +151,18 @@ def update_kmer_profile(n_clicks_profile: int,
         if cache.args.fastk_prefix_hoco is not None:
             prof_hoco = pullback_hoco(fastk.profex(cache.args.fastk_prefix_hoco,
                                                    read_id,
-                                                   cache.args.K),
+                                                   cache.args.k),
                                       seq)
             cache.pread_hoco = ProfiledRead(seq=seq,
                                             id=read_id,
-                                            K=cache.args.K,
+                                            K=cache.args.k,
                                             counts=prof_hoco)
             if cache.pread_hoco is None:
                 raise PreventUpdate
             cache.prv.add_trace_counts(cache.pread_hoco,
                                        col=cache.args.color_hoco,
                                        name="Hoco")
-        cache.prv.add_trace_bases(cache.pread_hoco)
-        return (cache.prv.add_trace_bases(cache.pread_hoco)
+        return (cache.prv.add_trace_bases(cache.pread)
                 .show(layout=reset_axes(fig),
                       return_fig=True))
     elif ctx.triggered[0]["prop_id"] == "submit-classify.n_clicks":
