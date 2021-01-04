@@ -25,6 +25,9 @@ class ProfiledRead(SeqRecord):
     def __post_init__(self):
         assert len(self.seq) == len(self.counts), \
             f"Inconsistent length between seq({len(self.seq)}) and counts({len(self.counts)})"
+        if self.states is not None:
+            assert len(self.seq) == len(self.states), \
+                f"Inconsistent length between seq({len(self.seq)}) and states({len(self.states)})"
 
     def __repr__(self) -> str:
         return self._order_repr(["K", "id", "counts", "states", "seq"])

@@ -1,7 +1,7 @@
 import argparse
 from copy import deepcopy
 from dataclasses import dataclass
-from typing import Optional, List
+from typing import Optional, List, Dict
 from logzero import logger
 import plotly.io as pio
 import plotly.graph_objects as go
@@ -31,6 +31,7 @@ class Cache:
     prv: Optional[ProfiledReadVisualizer] = None
     pread: Optional[ProfiledRead] = None
     pread_hoco: Optional[ProfiledRead] = None
+    states: Optional[Dict] = None
 
 
 cache = Cache()
@@ -117,14 +118,14 @@ def pullback_hoco(hoco_profile: List[int],
 
 @app.callback(
     Output('fig-profile', 'figure'),
-    [Input('submit-profile', 'n_clicks'),
-     Input('submit-classify', 'n_clicks')],
+    [Input('submit-profile', 'n_clicks')],
     [State('read-id', 'value'),
+     State('class-init', 'value'),
      State('fig-profile', 'figure')]
 )
 def update_kmer_profile(n_clicks_profile: int,
-                        n_clicks_classify: int,
                         read_id: int,
+                        class_init: List[str],
                         fig: go.Figure) -> go.Figure:
     """Update the count profile plot."""
     global cache
@@ -142,7 +143,8 @@ def update_kmer_profile(n_clicks_profile: int,
         cache.pread = ProfiledRead(seq=seq,
                                    id=read_id,
                                    K=cache.args.k,
-                                   counts=prof)
+                                   counts=prof,
+                                   states=None if cache.states is None else 'E' * (cache.args.k - 1) + cache.states[read_id])
         if cache.pread is None:
             raise PreventUpdate
         cache.prv = (ProfiledReadVisualizer()
@@ -162,14 +164,10 @@ def update_kmer_profile(n_clicks_profile: int,
             cache.prv.add_trace_counts(cache.pread_hoco,
                                        col=cache.args.color_hoco,
                                        name="Hoco")
+        if cache.states is not None:
+            cache.prv.add_trace_states(cache.pread,
+                                       show_init="SHOW" in class_init)
         return (cache.prv.add_trace_bases(cache.pread)
-                .show(layout=reset_axes(fig),
-                      return_fig=True))
-    elif ctx.triggered[0]["prop_id"] == "submit-classify.n_clicks":
-        if cache.prv is None:
-            raise PreventUpdate
-        return (deepcopy(cache.prv)
-                .add_trace_states(cache.pread)
                 .show(layout=reset_axes(fig),
                       return_fig=True))
     raise PreventUpdate
@@ -181,7 +179,6 @@ def update_kmer_profile(n_clicks_profile: int,
 
 
 def main():
-    # TODO: check availavility of commands required afterwards
     parse_args()
     app.layout = html.Div(children=[
         html.Div([html.Button(id='submit-dist',
@@ -204,10 +201,11 @@ def main():
         html.Div([html.Button(id='submit-profile',
                               n_clicks=0,
                               children='Draw k-mer count profile')]),
-        html.Div([html.Button(id='submit-classify',
-                              n_clicks=0,
-                              children='Classify k-mers')]),
-        # TODO: "download_html" button?
+        dcc.Checklist(id='class-init',
+                      options=[
+                          {'label': 'Show classifications', 'value': 'SHOW'}
+                      ],
+                      value=[]),
         dcc.Graph(id='fig-profile',
                   figure=go.Figure(
                       layout=pl.make_layout(width=1800,
@@ -253,11 +251,23 @@ def parse_args() -> argparse.Namespace:
         default="darkorange",
         help="Color for hoco plots.")
     parser.add_argument(
+        "-i",
+        "--class_fname",
+        type=str,
+        default=None,
+        help="K-mer classification result file name.")
+    parser.add_argument(
         "-d",
         "--debug_mode",
         action="store_true",
         help="Run a Dash server in a debug mode.")
     cache.args = parser.parse_args()
+    if cache.args.class_fname is not None:
+        cache.states = {}
+        with open(cache.args.class_fname, 'r') as f:
+            for line in f:
+                read_id, states = line.strip().split('\t')
+                cache.states[int(read_id)] = states
 
 
 if __name__ == '__main__':
