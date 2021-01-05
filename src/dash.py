@@ -68,11 +68,12 @@ def update_count_dist(n_clicks_dist: int,
             or ctx.triggered[0]["prop_id"] == "submit-dist.n_clicks"):
         # Global k-mer count distribution
         cache.cdv = CountDistVisualizer(relative=True)
-        cache.cdv.add_trace(fastk.histex(cache.args.fastk_prefix,
+        cache.cdv.add_trace(fastk.histex(cache.args.db_fastk_prefix,
                                          max_count=max_count),
                             col="gray",
                             opacity=1,
-                            name="Global (normal)")
+                            name=("Global" if cache.args.fastk_prefix_hoco is None
+                                  else "Global (normal)"))
         if cache.args.fastk_prefix_hoco is not None:
             cache.cdv.add_trace(fastk.histex(cache.args.fastk_prefix_hoco,
                                              max_count=max_count),
@@ -84,7 +85,7 @@ def update_count_dist(n_clicks_dist: int,
     elif ctx.triggered[0]["prop_id"] == "submit-profile.n_clicks":
         # Single-read k-mer count distribution
         read_id = int(read_id)
-        prof = fastk.profex(cache.args.fastk_prefix, read_id)
+        prof = fastk.profex(cache.args.db_fastk_prefix, read_id)
         return (deepcopy(cache.cdv)
                 .add_trace(RelCounter([min(c, max_count) for c in prof]),
                            col="turquoise",
@@ -102,8 +103,7 @@ def update_count_dist(n_clicks_dist: int,
 
 def pullback_hoco(hoco_profile: List[int],
                   normal_seq: str) -> List[int]:
-    """Project back hoco profile onto normal space.
-    """
+    """Project back hoco profile onto normal space."""
     assert hoco_profile[0] == 0, "Must have (K-1) 0-counts"
     pb_profile = [None] * len(normal_seq)
     i_normal = i_hoco = 0
@@ -136,8 +136,8 @@ def update_kmer_profile(n_clicks_profile: int,
         raise PreventUpdate
     if ctx.triggered[0]["prop_id"] == "submit-profile.n_clicks":
         # Draw a k-mer count profile from scratch
-        seq = load_db(cache.args.db_fname, read_id)[0].seq
-        prof = fastk.profex(cache.args.fastk_prefix,
+        seq = load_db(f"{cache.args.db_fastk_prefix}.db", read_id)[0].seq
+        prof = fastk.profex(cache.args.db_fastk_prefix,
                             read_id,
                             cache.args.k)
         cache.pread = ProfiledRead(seq=seq,
@@ -149,7 +149,8 @@ def update_kmer_profile(n_clicks_profile: int,
             raise PreventUpdate
         cache.prv = (ProfiledReadVisualizer()
                      .add_trace_counts(cache.pread,
-                                       name="Normal"))
+                                       name=("Profile" if cache.args.fastk_prefix_hoco is None
+                                             else "Normal")))
         if cache.args.fastk_prefix_hoco is not None:
             prof_hoco = pullback_hoco(fastk.profex(cache.args.fastk_prefix_hoco,
                                                    read_id,
@@ -179,6 +180,7 @@ def update_kmer_profile(n_clicks_profile: int,
 
 
 def main():
+    global cache
     parse_args()
     app.layout = html.Div(children=[
         html.Div([html.Button(id='submit-dist',
@@ -200,12 +202,11 @@ def main():
                             type='number')]),
         html.Div([html.Button(id='submit-profile',
                               n_clicks=0,
-                              children='Draw k-mer count profile')]),
-        dcc.Checklist(id='class-init',
-                      options=[
-                          {'label': 'Show classifications', 'value': 'SHOW'}
-                      ],
-                      value=[]),
+                              children='Draw k-mer count profile'),
+                  dcc.Checklist(id='class-init',
+                                options=[{'label': 'Show classifications from the beginning',
+                                          'value': 'SHOW'}],
+                                value=[])]),
         dcc.Graph(id='fig-profile',
                   figure=go.Figure(
                       layout=pl.make_layout(width=1800,
@@ -220,24 +221,26 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Visualizations for k-mer analysis")
     parser.add_argument(
-        "db_fname",
+        "db_fastk_prefix",
         type=str,
-        help="DAZZ_DB file name.")
-    parser.add_argument(
-        "fastk_prefix",
-        type=str,
-        help="Prefix of the FastK output files.")
+        help="Prefix of the DAZZ_DB and FastK files.")
     parser.add_argument(
         "fastk_prefix_hoco",
         nargs='?',
         type=Optional[str],
         default=None,
-        help="Prefix of the FastK output files for HoCo profiles.")
+        help="Prefix of the FastK output files for homopolymer compressed profiles.")
     parser.add_argument(
         "-k",
         type=int,
         default=40,
         help="The value of K for K-mers.")
+    parser.add_argument(
+        "-i",
+        "--class_fname",
+        type=str,
+        default=None,
+        help="K-mer classification result file name.")
     parser.add_argument(
         "-f",
         "--download_as",
@@ -250,12 +253,6 @@ def parse_args() -> argparse.Namespace:
         type=str,
         default="darkorange",
         help="Color for hoco plots.")
-    parser.add_argument(
-        "-i",
-        "--class_fname",
-        type=str,
-        default=None,
-        help="K-mer classification result file name.")
     parser.add_argument(
         "-d",
         "--debug_mode",
