@@ -1,4 +1,5 @@
 import argparse
+from os.path import splitext
 from copy import deepcopy
 from dataclasses import dataclass
 from typing import Optional, List, Dict
@@ -68,7 +69,7 @@ def update_count_dist(n_clicks_dist: int,
             or ctx.triggered[0]["prop_id"] == "submit-dist.n_clicks"):
         # Global k-mer count distribution
         cache.cdv = CountDistVisualizer(relative=True)
-        cache.cdv.add_trace(fastk.histex(cache.args.db_fastk_prefix,
+        cache.cdv.add_trace(fastk.histex(cache.args.fastk_prefix,
                                          max_count=max_count),
                             col="gray",
                             opacity=1,
@@ -77,7 +78,7 @@ def update_count_dist(n_clicks_dist: int,
         if cache.args.fastk_prefix_hoco is not None:
             cache.cdv.add_trace(fastk.histex(cache.args.fastk_prefix_hoco,
                                              max_count=max_count),
-                                col=cache.args.color_hoco,
+                                col="darkorange",
                                 opacity=0.7,
                                 name="Global (hoco)")
         return cache.cdv.show(layout=reset_axes(fig),
@@ -85,7 +86,7 @@ def update_count_dist(n_clicks_dist: int,
     elif ctx.triggered[0]["prop_id"] == "submit-profile.n_clicks":
         # Single-read k-mer count distribution
         read_id = int(read_id)
-        prof = fastk.profex(cache.args.db_fastk_prefix, read_id)
+        prof = fastk.profex(cache.args.fastk_prefix, read_id)
         return (deepcopy(cache.cdv)
                 .add_trace(RelCounter([min(c, max_count) for c in prof]),
                            col="turquoise",
@@ -136,8 +137,8 @@ def update_kmer_profile(n_clicks_profile: int,
         raise PreventUpdate
     if ctx.triggered[0]["prop_id"] == "submit-profile.n_clicks":
         # Draw a k-mer count profile from scratch
-        seq = load_db(f"{cache.args.db_fastk_prefix}.db", read_id)[0].seq
-        prof = fastk.profex(cache.args.db_fastk_prefix,
+        seq = load_db(cache.args.db_fname, read_id)[0].seq
+        prof = fastk.profex(cache.args.fastk_prefix,
                             read_id,
                             cache.args.k)
         cache.pread = ProfiledRead(seq=seq,
@@ -213,7 +214,8 @@ def main():
                                             height=500)),
                   config=dict(toImageButtonOptions=dict(format=cache.args.download_as)))
     ])
-    app.run_server(debug=cache.args.debug_mode)
+    app.run_server(port=int(cache.args.port_number),
+                   debug=cache.args.debug_mode)
 
 
 def parse_args() -> argparse.Namespace:
@@ -221,44 +223,52 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Visualizations for k-mer analysis")
     parser.add_argument(
-        "db_fastk_prefix",
+        "db_fname",
         type=str,
-        help="Prefix of the DAZZ_DB and FastK files.")
-    parser.add_argument(
-        "fastk_prefix_hoco",
-        nargs='?',
-        type=Optional[str],
-        default=None,
-        help="Prefix of the FastK output files for homopolymer compressed profiles.")
+        help="DAZZ_DB file name.")
     parser.add_argument(
         "-k",
         type=int,
         default=40,
-        help="The value of K for K-mers.")
+        help="The value of K for K-mers. [40]")
     parser.add_argument(
-        "-i",
+        "-f",
+        "--fastk_prefix",
+        type=Optional[str],
+        default=None,
+        help="Prefix of FastK outputs. [prefix of `db_fname`]")
+    parser.add_argument(
+        "-g",
+        "--fastk_prefix_hoco",
+        type=Optional[str],
+        default=None,
+        help="Prefix of FastK outputs for homopolymer compressed datasets. [None]")
+    parser.add_argument(
+        "-c",
         "--class_fname",
         type=str,
         default=None,
-        help="K-mer classification result file name.")
+        help="K-mer classification result file name. [None]")
     parser.add_argument(
-        "-f",
+        "-p",
+        "--port_number",
+        type=int,
+        default=8050,
+        help="Port number to run the server. [8050]")
+    parser.add_argument(
+        "-i",
         "--download_as",
         type=str,
         default="svg",
-        help="File format of the image downloaed via the icon.")
-    parser.add_argument(
-        "-c",
-        "--color_hoco",
-        type=str,
-        default="darkorange",
-        help="Color for hoco plots.")
+        help="File format of the image downloaed via the icon. [svg]")
     parser.add_argument(
         "-d",
         "--debug_mode",
         action="store_true",
         help="Run a Dash server in a debug mode.")
     cache.args = parser.parse_args()
+    if cache.args.fastk_prefix is None:
+        cache.args.fastk_prefix = splitext(cache.args.db_fname)[0]
     if cache.args.class_fname is not None:
         cache.states = {}
         with open(cache.args.class_fname, 'r') as f:
