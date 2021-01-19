@@ -4,7 +4,6 @@ from copy import deepcopy
 from dataclasses import dataclass
 from typing import Optional, List, Dict
 from logzero import logger
-import plotly.io as pio
 import plotly.graph_objects as go
 import plotly_light as pl
 import dash
@@ -19,7 +18,6 @@ from .type import ProfiledRead
 from .classifier.heuristics import run_heuristics
 from .visualizer import CountDistVisualizer, ProfiledReadVisualizer
 
-pio.templates.default = 'plotly_white'
 app = dash.Dash(__name__,
                 external_stylesheets=['https://codepen.io/chriddyp/pen/bWLwgP.css'])
 
