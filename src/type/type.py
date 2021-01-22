@@ -1,7 +1,9 @@
+from os.path import splitext
 from dataclasses import dataclass
 from typing import Optional, List, NamedTuple
-from bits.seq import SeqRecord
+from bits.seq import SeqRecord, load_db, load_fasta, load_fastq
 from bits.util import RelCounter
+import fastk
 
 
 @dataclass
@@ -45,3 +47,32 @@ class ProfiledRead(SeqRecord):
         # Remove data from the firt k-1 bases
         c.pop(0, None)
         return c
+
+
+def load_pread(read_id: int,
+               fastk_prefix: str,
+               seq_fname: Optional[str] = None,
+               K: Optional[int] = None) -> ProfiledRead:
+    """Utility for making a single profile read.
+
+    positional arguments:
+      @ read_id      : Read ID (1, 2, 3, ...).
+      @ fastk_prefix : Prefix of .prof file.
+      @ seq_fname    : Sequence file name.
+    """
+    counts = fastk.profex(fastk_prefix, read_id, K=K)
+    if seq_fname is not None:
+        ext = splitext(seq_fname)[1]
+        assert ext in (".db", ".dam", ".fasta", ".fastq"), \
+            "Not supported input file"
+        seq = (load_fasta if ext == ".fasta"
+               else load_fastq if ext == ".fastq"
+               else load_db)(seq_fname, read_id)[0].seq
+        if K is None:
+            seq = seq[K - 1:]
+    else:
+        seq = 'N' * len(counts)
+    return ProfiledRead(id=read_id,
+                        K=K,
+                        seq=seq,
+                        counts=counts)

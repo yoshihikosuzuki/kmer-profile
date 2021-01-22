@@ -17,47 +17,73 @@ class ProfiledReadVisualizer:
         if not isinstance(self.traces, list):
             self.traces = [self.traces]
 
+    def add_pread(self,
+                  pread: ProfiledRead,
+                  col: str = "black",
+                  name: Optional[str] = None,
+                  show_legend: bool = True,
+                  show_init_bases: bool = False,
+                  show_init_states: bool = False) -> ProfiledReadVisualizer:
+        name = name if name is not None else f"Read {pread.id}"
+        self.add_trace_counts(pread.counts,
+                              pread.seq,
+                              pread.K,
+                              col,
+                              name,
+                              show_legend)
+        self.add_trace_bases(pread.seq,
+                             pread.counts,
+                             col,
+                             name,
+                             show_legend,
+                             show_init_bases)
+        if pread.states is not None:
+            self.add_trace_states(pread.states,
+                                  pread.counts,
+                                  show_legend,
+                                  show_init_states)
+        return self
+
     def add_trace_counts(self,
-                         pread: ProfiledRead,
+                         counts: List[int],
+                         seq: Optional[str] = None,
+                         K: Optional[int] = None,
                          col: str = "black",
                          name: str = "Counts",
                          show_legend: bool = True) -> ProfiledReadVisualizer:
+        x = list(range(len(counts)))
+        y = counts
+        text = ([f"pos = {i}<br>count = {c}<br>"
+                 f"k-mer = {seq[i - K + 1:i + 1] if i >= K - 1 else '-'}"
+                 for i, c in enumerate(counts)] if seq is not None and K is not None
+                else None)
         self.traces += \
-            [pl.make_scatter(
-                x=list(range(pread.length)),
-                y=pread.counts,
-                text=[f"pos = {i}<br>count = {c}<br>"
-                      f"k-mer = {pread.seq[i - pread.K + 1:i + 1] if i >= pread.K - 1 else '-'}"
-                      for i, c in enumerate(pread.counts)],
-                mode="lines",
-                col=col,
-                name=name,
-                show_legend=show_legend,
-                use_webgl=self.use_webgl),
-             pl.make_scatter(
-                x=list(range(pread.length)),
-                y=pread.counts,
-                text=[f"pos = {i}<br>count = {c}<br>"
-                      f"k-mer = {pread.seq[i - pread.K + 1:i + 1] if i >= pread.K - 1 else '-'}"
-                      for i, c in enumerate(pread.counts)],
-                mode="markers",
-                col=col,
-                name=name,
-                show_legend=show_legend,
-                show_init=False,
-                use_webgl=self.use_webgl)]
+            [pl.make_scatter(x=x, y=y, text=text,
+                             mode="lines",
+                             col=col,
+                             name=name,
+                             show_legend=show_legend,
+                             use_webgl=self.use_webgl),
+             pl.make_scatter(x=x, y=y, text=text,
+                             mode="markers",
+                             col=col,
+                             name=name,
+                             show_legend=show_legend,
+                             show_init=False,
+                             use_webgl=self.use_webgl)]
         return self
 
     def add_trace_bases(self,
-                        pread: ProfiledRead,
+                        seq: str,
+                        counts: List[int],
                         col: str = "black",
                         name: str = "Bases",
                         show_legend: bool = True,
                         show_init: bool = False) -> ProfiledReadVisualizer:
         self.traces.append(
-            pl.make_scatter(x=list(range(pread.length)),
-                            y=pread.counts,
-                            text=list(pread.seq),
+            pl.make_scatter(x=list(range(len(seq))),
+                            y=counts,
+                            text=list(seq),
                             text_pos="top center",
                             mode="text",
                             name=name,
@@ -67,17 +93,17 @@ class ProfiledReadVisualizer:
         return self
 
     def add_trace_states(self,
-                         pread: ProfiledRead,
+                         states: List[str],
+                         counts: List[int],
                          show_legend: bool = True,
                          show_init: bool = False) -> ProfiledReadVisualizer:
-        assert len(pread.states) == pread.length
         state_pos = defaultdict(list)
-        for i, s in enumerate(pread.states):
+        for i, s in enumerate(states):
             assert s in STATES, "Invalid state character"
             state_pos[s].append(i)
         self.traces += \
             [pl.make_scatter(x=pos_list,
-                             y=[pread.counts[i] for i in pos_list],
+                             y=[counts[i] for i in pos_list],
                              mode="markers",
                              marker_size=4,
                              col=STATE_TO_COL[state],

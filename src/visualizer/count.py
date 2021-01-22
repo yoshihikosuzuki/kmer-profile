@@ -62,5 +62,5 @@ class CountDistVisualizer:
                                           else "Relative frequency [%]"),
                                  barmode=self.barmode)
         fig = pl.make_figure(self.traces,
-                             pl.merge_layout(layout, _layout))
+                             pl.merge_layout(_layout, layout))
         return fig if return_fig else pl.show(fig)
