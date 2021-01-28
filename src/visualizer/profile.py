@@ -22,6 +22,7 @@ class ProfiledReadVisualizer:
                   col: str = "black",
                   name: Optional[str] = None,
                   show_legend: bool = True,
+                  show_init_counts: bool = True,
                   show_init_bases: bool = False,
                   show_init_states: bool = False) -> ProfiledReadVisualizer:
         name = name if name is not None else f"Read {pread.id}"
@@ -30,7 +31,8 @@ class ProfiledReadVisualizer:
                               pread.K,
                               col,
                               name,
-                              show_legend)
+                              show_legend,
+                              show_init_counts)
         self.add_trace_bases(pread.seq,
                              pread.counts,
                              col,
@@ -50,7 +52,8 @@ class ProfiledReadVisualizer:
                          K: Optional[int] = None,
                          col: str = "black",
                          name: str = "Counts",
-                         show_legend: bool = True) -> ProfiledReadVisualizer:
+                         show_legend: bool = True,
+                         show_init: bool = True) -> ProfiledReadVisualizer:
         x = list(range(len(counts)))
         y = counts
         text = ([f"pos = {i}<br>count = {c}<br>"
@@ -63,6 +66,7 @@ class ProfiledReadVisualizer:
                              col=col,
                              name=name,
                              show_legend=show_legend,
+                             show_init=show_init,
                              use_webgl=self.use_webgl),
              pl.make_scatter(x=x, y=y, text=text,
                              mode="markers",
