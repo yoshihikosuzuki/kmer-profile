@@ -10,6 +10,7 @@ from ..type import STATES, STATE_TO_COL, ProfiledRead
 
 @dataclass
 class ProfiledReadVisualizer:
+    max_count: Optional[int] = None
     show_legend: bool = True
     use_webgl: bool = True
     traces: pl.Traces = field(default_factory=list)
@@ -21,7 +22,6 @@ class ProfiledReadVisualizer:
     def add_pread(self,
                   pread: ProfiledRead,
                   col: str = "black",
-                  name: Optional[str] = None,
                   show_legend: bool = True,
                   show_init_counts: bool = True,
                   show_init_bases: bool = False,
@@ -29,25 +29,22 @@ class ProfiledReadVisualizer:
         """Utility for simultaneously adding counts, bases, and states when a
         profiled read is available.
         """
-        name = name if name is not None else f"Read {pread.id}"
         self.add_counts(pread.counts,
                         pread.seq,
                         pread.K,
                         col,
-                        name,
-                        show_legend,
-                        show_init_counts)
+                        show_legend=show_legend,
+                        show_init=show_init_counts)
         self.add_bases(pread.seq,
                        pread.counts,
                        col,
-                       name,
-                       show_legend,
-                       show_init_bases)
+                       show_legend=show_legend,
+                       show_init=show_init_bases)
         if pread.states is not None:
             self.add_states(pread.states,
                             pread.counts,
-                            show_legend,
-                            show_init_states)
+                            show_legend=show_legend,
+                            show_init=show_init_states)
         return self
 
     def add_counts(self,
@@ -59,7 +56,8 @@ class ProfiledReadVisualizer:
                    show_legend: bool = True,
                    show_init: bool = True) -> ProfiledReadVisualizer:
         x = list(range(len(counts)))
-        y = counts
+        y = (counts if self.max_count is None
+             else [min(self.max_count, c) for c in counts])
         text = ([f"pos = {i}, count = {c}<br>"
                  f"k-mer = {seq[i - K + 1:i + 1] if i >= K - 1 else '-'}<br>"
                  f"-(k-1) pos = {i-K+1}, +(k-1) pos = {i+K-1}"
@@ -91,7 +89,8 @@ class ProfiledReadVisualizer:
                   show_init: bool = False) -> ProfiledReadVisualizer:
         self.traces.append(
             pl.make_scatter(x=list(range(len(seq))),
-                            y=counts,
+                            y=(counts if self.max_count is None
+                               else [min(self.max_count, c) for c in counts]),
                             text=list(seq),
                             text_pos="top center",
                             mode="text",
@@ -112,7 +111,9 @@ class ProfiledReadVisualizer:
             state_pos[s].append(i)
         self.traces += \
             [pl.make_scatter(x=pos_list,
-                             y=[counts[i] for i in pos_list],
+                             y=[(counts[i] if self.max_count is None
+                                 else min(self.max_count, counts[i]))
+                                for i in pos_list],
                              mode="markers",
                              marker_size=4,
                              col=STATE_TO_COL[state],
@@ -133,7 +134,9 @@ class ProfiledReadVisualizer:
                    show_init: bool = True) -> ProfiledReadVisualizer:
         self.traces.append(
             pl.make_scatter([x for b, e in intvls for x in [b, e - 1, None]],
-                            [counts[x] if x is not None else None
+                            [(counts[x] if self.max_count is None
+                              else min(self.max_count, counts[x]))
+                             if x is not None else None
                              for b, e in intvls for x in [b, e - 1, None]],
                             text=[f"intvls[{i}] @{x} ({counts[x]})" if x is not None else None
                                   for i, (b, e) in enumerate(intvls)
@@ -141,7 +144,8 @@ class ProfiledReadVisualizer:
                             mode="markers+lines",
                             col=col,
                             name=name,
-                            show_legend=show_legend))
+                            show_legend=show_legend,
+                            show_init=show_init))
         if states is not None:
             self.traces.append(
                 pl.make_scatter([x for b, e in intvls for x in [b, e - 1]],
@@ -167,7 +171,8 @@ class ProfiledReadVisualizer:
           @ return_fig : If True, return go.Figure object.
         """
         _layout = pl.make_layout(x_title="Position",
-                                 y_title="Count",
+                                 y_title=("K-mer count" if self.max_count is None
+                                          else f"K-mer count (capped at {self.max_count})"),
                                  x_grid=False,
                                  y_grid=False)
         fig = pl.make_figure(self.traces,
@@ -177,5 +182,5 @@ class ProfiledReadVisualizer:
                               buttons=[dict(label="<100",
                                             method="relayout",
                                             args=[{"yaxis.range[0]": 0,
-                                                   "yaxis.range[1]": 100}])])])
+                                                   "yaxis.range[1]": 101}])])])
         return fig if return_fig else pl.show(fig)

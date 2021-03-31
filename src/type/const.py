@@ -2,7 +2,7 @@
 STATES = "-EHDR"
 
 STATE_TO_COL = {'-': "black",
-                'E': "red",
+                'E': "magenta",
                 'H': "green",
                 'D': "blue",
-                'R': "yellow"}
+                'R': "orange"}
