@@ -32,7 +32,7 @@ A binary executable for visualization, `kmer_profile`, is installed in addition 
 Run the following command and then open `http://localhost:8050` in a browser (port number can be changed with the option `-p`).
 
 ```bash
-$ kmer_profile -s <sequence_file> <fastk_prefix>
+$ kmer_profiler -s <sequence_file> <fastk_prefix>
 ```
 
 To show the help message, run `$ kmer_profile -h`:
