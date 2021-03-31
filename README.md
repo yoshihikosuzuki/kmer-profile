@@ -27,6 +27,8 @@ A binary executable for visualization, `kmer_profile`, is installed in addition 
 
 ## How to use
 
+You are supposed to have FastK's outputs with the `-p` option (i.e. you need to have a `.prof` file) for your dataset.
+
 ### Visualize k-mer count histogram and count profile
 
 Run the following command and then open `http://localhost:8050` in a browser (port number can be changed with the option `-p`).
