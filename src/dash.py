@@ -53,12 +53,14 @@ def reset_axes(fig: go.Figure) -> go.Layout:
 )
 def update_count_dist(n_clicks_dist: int,
                       n_clicks_profile: int,
-                      read_id: str,
-                      max_count: str,
+                      read_id: Optional[str],
+                      max_count: Optional[str],
                       fig: go.Figure) -> go.Figure:
     """Update the aggregated k-mer count distribution."""
     global cache
     ctx = dash.callback_context
+    if not max_count:
+        raise PreventUpdate
     max_count = int(max_count)
     if (not ctx.triggered
             or ctx.triggered[0]["prop_id"] == "submit-dist.n_clicks"):
@@ -73,6 +75,8 @@ def update_count_dist(n_clicks_dist: int,
                               return_fig=True)
     elif ctx.triggered[0]["prop_id"] == "submit-profile.n_clicks":
         # Single-read k-mer count distribution
+        if not read_id:
+            raise PreventUpdate
         read_id = int(read_id)
         prof = fastk.profex(cache.args.fastk_prefix, read_id)
         return (deepcopy(cache.cdv)
@@ -99,18 +103,17 @@ def update_count_dist(n_clicks_dist: int,
      State('fig-profile', 'figure')]
 )
 def update_kmer_profile(n_clicks_profile: int,
-                        read_id: str,
-                        max_count: str,
+                        read_id: Optional[str],
+                        max_count: Optional[str],
                         class_init: List[str],
                         fig: go.Figure) -> go.Figure:
     """Update the count profile plot."""
     global cache
     ctx = dash.callback_context
-    if read_id != "":
-        read_id = int(read_id)
-    max_count = None if max_count == "" else int(max_count)
-    if not ctx.triggered:
+    if not ctx.triggered or not read_id:
         raise PreventUpdate
+    read_id = int(read_id)
+    max_count = int(max_count) if max_count else None
     if ctx.triggered[0]["prop_id"] == "submit-profile.n_clicks":
         # Draw a k-mer count profile from scratch
         cache.pread = load_pread(read_id,
@@ -159,7 +162,7 @@ def main():
                   " [OPTIONS]",
                   " Max count = ",
                   dcc.Input(id='max-count-prof',
-                            value='32767',
+                            value='',
                             type='number'),
                   dcc.Checklist(id='class-init',
                                 options=[{'label': 'Show classifications from the beginning',

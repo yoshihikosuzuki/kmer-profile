@@ -14,6 +14,8 @@ class ProfiledReadVisualizer:
     show_legend: bool = True
     use_webgl: bool = True
     traces: pl.Traces = field(default_factory=list)
+    xmax = None
+    ymax = None
 
     def __post_init__(self):
         if not isinstance(self.traces, list):
@@ -29,6 +31,8 @@ class ProfiledReadVisualizer:
         """Utility for simultaneously adding counts, bases, and states when a
         profiled read is available.
         """
+        self.xmax= pread.length
+        self.ymax = max(pread.counts)
         self.add_counts(pread.counts,
                         pread.seq,
                         pread.K,
@@ -176,7 +180,7 @@ class ProfiledReadVisualizer:
                                  x_grid=False,
                                  y_grid=False)
         fig = pl.make_figure(self.traces,
-                             pl.merge_layout(_layout, layout))
+                             pl.merge_layout(layout, _layout))
         fig.update_layout(
             updatemenus=[dict(type="buttons",
                               buttons=[dict(label="<100",
