@@ -29,13 +29,13 @@ A binary executable for visualization, `kmer_profile`, is installed in addition 
 
 ### Visualize k-mer count histogram and count profile
 
-Run the following command and then open `http://localhost:8050` in a browser (port number can be specified by the option `-p`).
+Run the following command and then open `http://localhost:8050` in a browser (port number can be changed with the option `-p`).
 
 ```bash
 $ kmer_profile -s <sequence_file> <fastk_prefix>
 ```
 
-To show help messages, run `$ kmer_profile -h`:
+To show the help message, run `$ kmer_profile -h`:
 
 ```text
 usage: kmer_profiler [-h] [-s SEQ_FNAME] [-c CLASS_FNAME] [-p PORT_NUMBER]
