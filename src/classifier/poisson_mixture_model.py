@@ -1,6 +1,7 @@
 from typing import Sequence, Tuple, List
 import numpy as np
 from scipy.special import digamma
+from logzero import logger
 
 
 def gibbs_sampling(data: Sequence[int],
@@ -57,7 +58,7 @@ def gibbs_sampling(data: Sequence[int],
     partitions = [alpha / sum(alpha_hyperparams)
                   for alpha in alpha_hyperparams]
     assignments = [None] * N
-    for t in range(n_max_iter):
+    for _ in range(n_max_iter):
         for n in range(N):
             update_assignment(n)
         for k in range(K):
@@ -120,17 +121,23 @@ def variational_inference(data: Sequence[int],
     N = len(data)
     assignment_etas = [[None] * K for _ in range(N)]
     lambda_as, lambda_bs = map(list, zip(*gamma_hyperparams))
+    lambda_prevs = [lambda_as[k] / lambda_bs[k] for k in range(K)]
     partition_alphas = alpha_hyperparams
-    for t in range(n_max_iter):
+    for _ in range(n_max_iter):
         for n in range(N):
             update_q_assignment(n)
         for k in range(K):
             update_q_lambda(k)
-        if verbose:
-            print(f"lambda_abs={list(zip(lambda_as, lambda_bs))}")
         update_q_partition()
+        lambdas = [lambda_as[k] / lambda_bs[k] for k in range(K)]
         if verbose:
-            print(f"partition_alphas={partition_alphas}")
-        # TODO: impl stopping criterion
+            logger.debug(f"partition_alphas={partition_alphas}")
+            logger.debug(f"lambda_abs={list(zip(lambda_as, lambda_bs))}")
+            logger.debug(f"lambda estimates = {lambdas}")
+        if all([abs(lambda_prev - lambda_curr) < 0.1
+                for lambda_prev, lambda_curr in zip(lambda_prevs, lambdas)]):
+            break
+        lambda_prevs = lambdas
+        # TODO: impl stopping criterion using ELBO
     return (np.argmax(assignment_etas, axis=1),
             [lambda_as[k] / lambda_bs[k] for k in range(K)])

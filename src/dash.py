@@ -13,7 +13,8 @@ from dash.dependencies import Input, Output, State
 from dash.exceptions import PreventUpdate
 from bits.util import RelCounter
 import fastk
-from .type import ProfiledRead, load_pread
+from .type import ProfiledRead
+from .classifier import load_pread
 from .visualizer import CountDistVisualizer, ProfiledReadVisualizer
 
 app = dash.Dash(__name__,
@@ -51,8 +52,8 @@ def reset_axes(fig: go.Figure) -> go.Layout:
      State('max-count-dist', 'value'),
      State('fig-dist', 'figure')]
 )
-def update_count_dist(n_clicks_dist: int,
-                      n_clicks_profile: int,
+def update_count_dist(_n_clicks_dist: int,
+                      _n_clicks_profile: int,
                       read_id: Optional[str],
                       max_count: Optional[str],
                       fig: go.Figure) -> go.Figure:
@@ -102,7 +103,7 @@ def update_count_dist(n_clicks_dist: int,
      State('class-init', 'value'),
      State('fig-profile', 'figure')]
 )
-def update_kmer_profile(n_clicks_profile: int,
+def update_kmer_profile(_n_clicks_profile: int,
                         read_id: Optional[str],
                         max_count: Optional[str],
                         class_init: List[str],
