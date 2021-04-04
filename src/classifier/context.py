@@ -161,33 +161,46 @@ def calc_p_error(i: int,
                           alternative="greater")
 
 
-def find_ns_points(pread: ProfiledRead,
-                   thres_p_self: float = 0.001,
-                   thres_p_others: float = 0.05,
-                   min_change: int = 2,
-                   max_change: int = 5,
-                   thres_r: int = 1000) -> None:
-    """Find every position i where count change from (i-1) -> i
-    can be a state change. This is just for reducing the size of
-    candidates of state change points and thus should be performed
-    conservatively, i.e. false positives are OK but false negatives are NG.
+def recalc_p_errors(pread):
+    pread.corrected_pe = {error_type: {change_type: [max(p_list)
+                                           for p_list in zip(*[[recalc_p_error(i, pread, ctx, error_type, change_type)
+                                                                for i in range(pread.length)]
+                                                               for ctx in pread.ctx])]
+                             for change_type in ("drop", "gain")}
+                for error_type in ("self", "others")}
+
+
+def recalc_p_error(i, pread, ctx, error_type, change_type) -> float:
+    """Compute the probability that the count [drop|gain] at (i-1) -> i
+    is because of error(s) in [self|others].
+
+    positional argument:
+      @ i     : Position index.
+      @ pread : Profiled read.
+      @ ctx   : Sequence context feature vectors. Element in `pread.ctx`.
+      @ error_type  : Must be one of {"self", "others"}.
+      @ change_type : Must be one of {"drop", "gain"}.
     """
-    pread.ns = [(max(pread.pe["self"]["drop"][i],
-                     pread.pe["self"]["gain"][i]) > thres_p_self
-                 or min(pread.pe["others"]["drop"][i],
-                        pread.pe["others"]["gain"][i]) < thres_p_others)
-                for i in range(pread.length)]
-    for i in range(1, pread.length):
-        if abs(pread.counts[i] - pread.counts[i - 1]) <= min_change:
-            pread.ns[i] = False
-        elif abs(pread.counts[i] - pread.counts[i - 1]) > max_change:
-            pread.ns[i] = True
-    for i in range(1, pread.length):
-        if pread.ns[i] and min(pread.counts[i - 1:i + 1]) >= thres_r:
-            pread.ns[i] = False
-    logger.info(f"{pread.length} counts -> {sum(pread.ns)} non-smooth points")
-
-
-def ns_to_intvls(pread: ProfiledRead) -> None:
-    chpt = [0] + [i for i, x in enumerate(pread.ns) if x] + [pread.length]
-    pread.intvls = [(chpt[i], chpt[i + 1]) for i in range(len(chpt) - 1)]
+    # TODO: Is it OK to take max among context types within this function?
+    assert change_type in ("drop", "gain")
+    assert error_type in ("self", "others")
+    # NOTE: If the count data is invalid, set Pr=0 for error in self
+    #       and Pr=1 for errors in others
+    p_invalid = 0. if error_type == "self" else 1.
+    if not (0 < i and i < pread.length):
+        return p_invalid
+    cp, ci = pread.corrected_counts[i - 1:i + 1]
+    if change_type == "drop":
+        if cp <= ci:   # not a drop
+            return p_invalid
+        return binom_test(ci if error_type == "self" else cp - ci,
+                          cp,
+                          ctx.erates[0][i - 1],
+                          alternative="greater")
+    else:
+        if cp >= ci:   # not a gain
+            return p_invalid
+        return binom_test(cp if error_type == "self" else ci - cp,
+                          ci,
+                          ctx.erates[1][i],
+                          alternative="greater")

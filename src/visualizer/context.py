@@ -41,12 +41,12 @@ def trace_pe(pread: ProfiledRead,
             for _type, col in zip(("drop", "gain"), ("cyan", "magenta"))]
 
 
-def trace_depth(depths: Dict[str, int],
-                pread: ProfiledRead,
+def trace_depth(pread: ProfiledRead,
+                depths: Dict[str, int],
                 thres: Dict[str, float] = None,
                 opacity: float = 1,
-                col_thres: str = "orange",
-                width_thres: float = 1,
+                col_thres: str = "tomato",
+                width_thres: float = 2,
                 name: Optional[str] = None,
                 show_legend: bool = True,
                 show_init: bool = True) -> List[pl.BaseTraceType]:
@@ -74,9 +74,11 @@ def trace_depth(depths: Dict[str, int],
 
 
 def trace_ns(pread: ProfiledRead,
+             max_count: Optional[int] = None,
              show_legend: bool = True,
              show_init: bool = True) -> pl.BaseTraceType:
-    max_count = max(pread.counts)
+    if max_count is None:
+        max_count = max(pread.counts)
     return pl.make_lines([(i, 0, i, max_count) for i, ns in enumerate(pread.ns) if ns],
                          text=[f"{pread.counts[i - 1]}@{i - 1}->{pread.counts[i]}@{i}"
                                for i, ns in enumerate(pread.ns) if ns],

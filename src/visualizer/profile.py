@@ -11,11 +11,11 @@ from ..type import STATES, STATE_TO_COL, ProfiledRead
 @dataclass
 class ProfiledReadVisualizer:
     max_count: Optional[int] = None
+    width: Optional[int] = None
+    height: Optional[int] = None
     show_legend: bool = True
     use_webgl: bool = True
     traces: pl.Traces = field(default_factory=list)
-    xmax = None
-    ymax = None
 
     def __post_init__(self):
         if not isinstance(self.traces, list):
@@ -31,8 +31,6 @@ class ProfiledReadVisualizer:
         """Utility for simultaneously adding counts, bases, and states when a
         profiled read is available.
         """
-        self.xmax= pread.length
-        self.ymax = max(pread.counts)
         self.add_counts(pread.counts,
                         pread.seq,
                         pread.K,
@@ -153,7 +151,8 @@ class ProfiledReadVisualizer:
         if states is not None:
             self.traces.append(
                 pl.make_scatter([x for b, e in intvls for x in [b, e - 1]],
-                                [counts[x]
+                                [(counts[x] if self.max_count is None
+                                  else min(self.max_count, counts[x]))
                                  for b, e in intvls for x in [b, e - 1]],
                                 col=[STATE_TO_COL[s] for s in states for _ in range(2)]))
         return self
@@ -174,7 +173,9 @@ class ProfiledReadVisualizer:
           @ layout : For any additional layouts.
           @ return_fig : If True, return go.Figure object.
         """
-        _layout = pl.make_layout(x_title="Position",
+        _layout = pl.make_layout(width=self.width,
+                                 height=self.height,
+                                 x_title="Position",
                                  y_title=("K-mer count" if self.max_count is None
                                           else f"K-mer count (capped at {self.max_count})"),
                                  x_grid=False,
