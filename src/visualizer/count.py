@@ -9,12 +9,12 @@ from bits.util import RelCounter
 
 @dataclass
 class CountDistVisualizer:
+    width: Optional[int] = 700
+    height: Optional[int] = 500
     relative: bool = False
-    width: Optional[int] = None
-    height: Optional[int] = None
-    barmode: str = "overlay"
-    show_legend: bool = True
+    show_legend: bool = False
     use_histogram: bool = False
+    barmode: str = "overlay"
     traces: pl.Traces = field(default_factory=list)
 
     def __post_init__(self):
