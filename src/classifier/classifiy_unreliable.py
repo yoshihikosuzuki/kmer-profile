@@ -203,7 +203,7 @@ def check_sparsity(states, wlen=1000, thres_p=0.1):
     return states
 
 
-def get_states(long_merged_smooth_intvls, asgn, profile, merged_intvls, pread, DEPTHS, verbose=False):
+def get_states(long_merged_smooth_intvls, asgn, profile, merged_intvls, pread, DEPTHS, th_p_normal=0.1, verbose=False):
     lmsi_to_asgn = dict(zip(long_merged_smooth_intvls, asgn))
     asgn_merged = [lmsi_to_asgn[intvl]
                    if intvl in lmsi_to_asgn and lmsi_to_asgn[intvl] != 'E' else '-' for intvl in merged_intvls]
@@ -218,9 +218,7 @@ def get_states(long_merged_smooth_intvls, asgn, profile, merged_intvls, pread, D
         list(filter(lambda state: state in ('H', 'D'), states))) / len(states)
 
     logger.info(f"%Normal={p_normal * 100}")
-    if p_normal >= 0.1:
-        logger.info("Not too repetitive. Classify unreliable intervals")
-    else:
+    if p_normal < th_p_normal:
         logger.info("Too repetitive. Do not classify unreliable intervals")
 
     for i, s, t, c, state in sorted([(j, merged_intvls[j][0], merged_intvls[j][1],
@@ -232,7 +230,7 @@ def get_states(long_merged_smooth_intvls, asgn, profile, merged_intvls, pread, D
             print(f"\n### {s, t, c}")
         #if state == '-':
         if i in i_updates:
-            if p_normal >= 0.1:
+            if p_normal >= th_p_normal:
                 asgn_merged[i] = update_state_short(
                     i, merged_intvls, asgn_merged, profile, pread, DEPTHS, verbose)
             else:
@@ -246,7 +244,7 @@ def get_states(long_merged_smooth_intvls, asgn, profile, merged_intvls, pread, D
             print(f"\n### {s, t, c}")
         #if state == '-':
         if i in i_updates:
-            if p_normal >= 0.1:
+            if p_normal >= th_p_normal:
                 asgn_merged[i] = update_state_short(
                     i, merged_intvls, asgn_merged, profile, pread, DEPTHS, verbose)
             else:

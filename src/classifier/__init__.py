@@ -1,5 +1,5 @@
 from .io import load_pread, get_pread
-from .context import make_hp_emodel, make_ds_emodel, calc_p_errors, recalc_p_errors
+from .context import make_hp_emodel, make_ds_emodel, make_ts_emodel, calc_p_errors, recalc_p_errors
 from .intvl import find_ns_points, ns_to_intvls, check_drop, check_gain, calc_pe_intvls, correct_intvls, remove_ns_intvsl
 from .naive import naive_classification, find_depths_and_thres
 from .poisson_mixture_model import variational_inference

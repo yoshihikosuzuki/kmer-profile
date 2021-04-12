@@ -22,7 +22,7 @@ def make_hp_emodel(max_hplen: int,
                       _pe=[0] + [round(a * x * x + b, 3)
                                  for x in range(1, max_hplen + 1)],
                       name="HP",
-                      cols=("#0041ff", "#ff7700"))
+                      cols=("dodgerblue", "coral"))
 
 
 def make_ds_emodel(max_ncopy: int,
@@ -39,77 +39,73 @@ def make_ds_emodel(max_ncopy: int,
                       _pe=[0] + [round(a * x * x + b, 3)
                                  for x in range(1, max_ncopy + 1)],
                       name="DS",
-                      cols=("#35a16b", "#910079"))
+                      cols=("teal", "firebrick"))
+
+def make_ts_emodel(max_ncopy: int,
+                   a: float,
+                   b: float) -> ErrorModel:
+    """Utility for making a trinucleotide satellite error model.
+
+    positional arguments:
+      @ max_ncopy : Maximum copy number of the satellite to be considered
+      @ a, b      : Error rate is computed by ax^2 + b, where x is the
+                    copy number.
+    """
+    return ErrorModel(maxlen=max_ncopy,
+                      _pe=[0] + [round(a * x * x + b, 3)
+                                 for x in range(1, max_ncopy + 1)],
+                      name="TS",
+                      cols=("olive", "indigo"))
 
 
 def calc_seq_ctx(seq: str,
                  K: int,
                  hp_emodel: ErrorModel,
                  ds_emodel: ErrorModel,
-                 ts_emodel: ErrorModel = None) -> List[SeqCtx]:
+                 ts_emodel: ErrorModel) -> List[SeqCtx]:
     """Calculate the length of HP, DS, TS (Homopolymer, dinucleotide
     satellite, trinucleotide satellite, respectively.) for each position.
 
     positional arguments:
       @ seq  : *Original* (= the first (K - 1) bases are untrimmed)
                sequence of a read.
-      @ type : Must be one of {"HP", "DS", "TS"}.
-               (Homopolymer, dinucleotide satellite, trinucleotide satellite,
-                respectively.)
       @ K    : Of K-mers.
+      @ [hp|ds|ts]_emodel : Error models.
     """
-    def _calc_hp_lens(seq: str) -> List[int]:
-        lens = []
-        x = seq[0]
-        c = 1
-        lens.append(c)
-        for i in range(1, len(seq)):
-            if seq[i] == x:
-                c += 1
-            else:
-                c = 1
-            lens.append(c)
-            x = seq[i]
-        assert len(seq) == len(lens)
-        return lens
 
-    def _calc_disat_lens(seq: str) -> List[int]:
-        # TODO: do simultaneously with HP
-        lens = []
-        x = seq[0]
-        c = 0
-        lens.append(c)
-        y = seq[1]
-        c = 0 if x == y else 1
-        lens.append(c)
-        z = seq[2]
-        c = 0 if y == z else 1
-        lens.append(c)
-        for i in range(3, len(seq)):
-            if seq[i] == z:
-                c = 0
-            elif x == z and y == seq[i]:
-                c += 1
-            elif seq[i] != y:
-                c = 1
-            lens.append(c if c <= 2 else 2 + (c - 2) // 2)
-            x = y
-            y = z
-            z = seq[i]
-        assert len(seq) == len(lens)
-        return lens
+    def _calc_ctx(seq: str) -> Tuple[List[int], List[int], List[int]]:
+        hp_lens = [1] * len(seq)
+        ds_lens = [0] * len(seq)
+        ts_lens = [0] * len(seq)
+        for i in range(len(seq)):
+            if i >= 1:
+                if seq[i - 1] == seq[i]:
+                    hp_lens[i] = hp_lens[i - 1] + 1
+                else:
+                    ds_lens[i] = 1
+                    if i >= 3:
+                        if seq[i - 3:i - 1] == seq[i - 1:i + 1]:
+                            ds_lens[i] = ds_lens[i - 2] + 1
+            if i >= 2:
+                if seq[i - 2] == seq[i - 1] == seq[i]:
+                    continue
+                ts_lens[i] = 1
+                if i >= 5:
+                    if seq[i - 5:i - 2] == seq[i - 2:i + 1]:
+                        ts_lens[i] = ts_lens[i - 3] + 1
+        return (hp_lens, ds_lens, ts_lens)
 
-    def _calc_trisat_lens(seq: str) -> List[int]:
-        # TODO: implement
-        pass
-
-    rseq = seq[::-1]
-    return (SeqCtx(lens=(_calc_hp_lens(seq)[K - 1:],
-                         list(reversed(_calc_hp_lens(rseq)))[:-(K - 1)]),
+    hp_l, ds_l, ts_l = _calc_ctx(seq)
+    hp_r, ds_r, ts_r = _calc_ctx(seq[::-1])
+    return (SeqCtx(lens=(hp_l[K - 1:],
+                         list(reversed(hp_r))[:-(K - 1)]),
                    emodel=hp_emodel),
-            SeqCtx(lens=(_calc_disat_lens(seq)[K - 1:],
-                         list(reversed(_calc_disat_lens(rseq)))[:-(K - 1)]),
-                   emodel=ds_emodel))
+            SeqCtx(lens=(ds_l[K - 1:],
+                         list(reversed(ds_r))[:-(K - 1)]),
+                   emodel=ds_emodel),
+            SeqCtx(lens=(ts_l[K - 1:],
+                         list(reversed(ts_r))[:-(K - 1)]),
+                   emodel=ts_emodel))
 
 
 def calc_p_errors(pread: ProfiledRead) -> None:
@@ -163,11 +159,11 @@ def calc_p_error(i: int,
 
 def recalc_p_errors(pread):
     pread.corrected_pe = {error_type: {change_type: [max(p_list)
-                                           for p_list in zip(*[[recalc_p_error(i, pread, ctx, error_type, change_type)
-                                                                for i in range(pread.length)]
-                                                               for ctx in pread.ctx])]
-                             for change_type in ("drop", "gain")}
-                for error_type in ("self", "others")}
+                                                     for p_list in zip(*[[recalc_p_error(i, pread, ctx, error_type, change_type)
+                                                                          for i in range(pread.length)]
+                                                                         for ctx in pread.ctx])]
+                                       for change_type in ("drop", "gain")}
+                          for error_type in ("self", "others")}
 
 
 def recalc_p_error(i, pread, ctx, error_type, change_type) -> float:

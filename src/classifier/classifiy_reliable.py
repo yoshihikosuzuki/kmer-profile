@@ -296,19 +296,11 @@ def logp_hd(state, i, intvls, asgn, profile, pread, DEPTHS, verbose, lread=20000
             print(
                 f"  logp(ER)={logp_er} {'***' if logp_er >= logp_sf else ''}")
     if p < 0 and n >= len(asgn):
+        logp_l = poisson.logpmf(profile[ib], DEPTHS[state])
+        logp_r = poisson.logpmf(profile[ie - 1], DEPTHS[state])
         if verbose:
-            print(
-                f"[ISOLATED] {profile[ib]} @ {ib} -- {profile[ie - 1]} @ {ie - 1}")
-        if ie - ib >= 100:
-            logp_l = poisson.logpmf(profile[ib], DEPTHS[state])
-            logp_r = poisson.logpmf(profile[ie - 1], DEPTHS[state])
-            if verbose:
-                print(f"  logp(L POISSON)={logp_l}")
-                print(f"  logp(R POISSON)={logp_r}")
-        else:
-            if verbose:
-                print("  too short")
-            return -np.inf
+            print(f"  logp(L POISSON)={logp_l}")
+            print(f"  logp(R POISSON)={logp_r}")
     elif p < 0:
         logp_l = logp_r
     elif n >= len(asgn):

@@ -21,7 +21,7 @@ def trace_minus(data: Sequence[float],
 
 
 def trace_ctx(pread: ProfiledRead,
-              min_vals: Tuple[int, int] = (4, 2),
+              min_vals: Tuple[int, int] = (4, 3, 2),
               show_legend: bool = True,
               show_init: bool = True) -> List[pl.BaseTraceType]:
     assert len(min_vals) == len(pread.ctx)
@@ -38,7 +38,7 @@ def trace_pe(pread: ProfiledRead,
     return [trace_minus([x * 100 for x in pread.pe["self"][_type]],
                         col, f"%Pr{{error in self}} [{_type}]", min_val,
                         show_legend, show_init)
-            for _type, col in zip(("drop", "gain"), ("cyan", "magenta"))]
+            for _type, col in zip(("drop", "gain"), ("deepskyblue", "deeppink"))]
 
 
 def trace_depth(pread: ProfiledRead,

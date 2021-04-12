@@ -10,10 +10,11 @@ def get_pread(read_id: int,
               fastk_prefix: str,
               seq_fname: str,
               hp_emodel: ErrorModel,
-              ds_emodel: ErrorModel) -> ProfiledRead:
+              ds_emodel: ErrorModel,
+              ts_emodel: ErrorModel) -> ProfiledRead:
     """Load a read, calculate sequence contexts, and trim the first (K-1) bases."""
     pread = load_pread(read_id, fastk_prefix, seq_fname)
-    pread.ctx = calc_seq_ctx(pread.seq, pread.K, hp_emodel, ds_emodel)
+    pread.ctx = calc_seq_ctx(pread.seq, pread.K, hp_emodel, ds_emodel, ts_emodel)
     pread.counts = pread.counts[pread.K - 1:]
     pread.seq = pread.seq[pread.K - 1:]
     return pread
