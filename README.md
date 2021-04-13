@@ -34,29 +34,37 @@ You are supposed to have FastK's outputs with the `-p` option (i.e. you need to 
 Run the following command and then open `http://localhost:8050` in a browser (port number can be changed with the option `-p`).
 
 ```bash
-$ kmer_profiler -s <sequence_file> <fastk_prefix>
+$ kmer_profiler [-s <sequence_file>] <fastk_prefix>
 ```
 
 To show the help message, run `$ kmer_profile -h`:
 
 ```text
 usage: kmer_profiler [-h] [-s SEQ_FNAME] [-c CLASS_FNAME] [-p PORT_NUMBER]
-                     [-d]
+                     [-f IMG_FORMAT] [-d]
                      fastk_prefix
 
 K-mer count profile visualizer
 
 positional arguments:
-  fastk_prefix          Prefix of FastK's output files.
+  fastk_prefix          Prefix of FastK's output files. Both
+                        `<fastk_prefix>.hist` and `<fastk_prefix>.prof` must
+                        exist.
 
 optional arguments:
   -h, --help            show this help message and exit
   -s SEQ_FNAME, --seq_fname SEQ_FNAME
-                        Name of the input file for FastK. Must be
-                        .db/dam/fast[a|q]. [None]
+                        Name of the input file for FastK containing reads.
+                        Must be .db/dam/fast[a|q]. Used for displaying baes in
+                        profile plot [None]
   -c CLASS_FNAME, --class_fname CLASS_FNAME
-                        K-mer classification result file name. [None]
+                        File name of K-mer classification result. [None]
   -p PORT_NUMBER, --port_number PORT_NUMBER
-                        Port number to run the server. [8050]
+                        Port number of localhost to run the server. [8050]
+  -f IMG_FORMAT, --img_format IMG_FORMAT
+                        Format of plot images you can download with camera
+                        icon. ['svg']
   -d, --debug_mode      Run a Dash server in a debug mode.
 ```
+
+**!!! IMPORTANT !!!**: If you use `DOWNLOAD HTML` buttons in the viewer, disable your browser's cache (only in the viewer's tab) For example, in Chrome, go to `Developer Tool` → `Network` tab → `Disable cache` checkbox and keep the Developer Tool open while using the viewer.
