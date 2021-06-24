@@ -67,4 +67,6 @@ optional arguments:
   -d, --debug_mode      Run a Dash server in a debug mode.
 ```
 
-**!!! IMPORTANT !!!**: If you use `DOWNLOAD HTML` buttons in the viewer, disable your browser's cache (only in the viewer's tab) For example, in Chrome, go to `Developer Tool` → `Network` tab → `Disable cache` checkbox and keep the Developer Tool open while using the viewer.
+**!!! IMPORTANT !!!**
+
+If you use `DOWNLOAD HTML` buttons in the viewer, disable your browser's cache (only in the viewer's tab) For example, in Chrome, go to `Developer Tool` → `Network` tab → `Disable cache` checkbox and keep the Developer Tool open while using the viewer.

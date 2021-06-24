@@ -1,9 +1,7 @@
-from dataclasses import dataclass
-from typing import Sequence, List, Tuple, Dict
+from typing import Tuple, Dict
 from copy import deepcopy
 import numpy as np
-from scipy.stats import binom, binom_test, poisson, skellam, norm
-from scipy.special import digamma
+from scipy.stats import skellam
 from logzero import logger
 from ..type import ProfiledRead
 
@@ -222,6 +220,7 @@ def calc_pe_intvls(pread,
             print(f"\n### {s, t, c}")
         max_p_self_s, max_p_self_t = 0., 0.
         max_p_others_s, max_p_others_t = 0., 0.
+        max_intvl_self_s, max_intvl_others_s, max_intvl_self_t, max_intvl_others_t = [None] * 4
         if s > 0 and pread.counts[s - 1] > pread.counts[s]:
             # Single error event
             if verbose:

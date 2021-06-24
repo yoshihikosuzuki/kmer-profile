@@ -3,18 +3,24 @@ import numpy as np
 from scipy.stats import binom, binom_test, poisson, skellam, norm
 from logzero import logger
 from ..type import STATES
-from .classifiy_reliable import nn_intvl, estimate_true_counts_intvl, logp_e
+from .classifiy_reliable import nn_intvl, estimate_true_counts, estimate_true_counts_intvl, logp_e
 
 
-def logp_r_short(i, intvls, asgn, profile, DEPTHS, verbose):
+def logp_r_short(i, intvls, asgn, profile, DEPTHS, verbose, n_sigma=1):
     if verbose:
         print("### REPEAT ###")
     ib, ie = intvls[i]
     if max(profile[ib], profile[ie - 1]) >= DEPTHS['R']:
         return 0.
-    pc, nc = estimate_true_counts_intvl(i, 'D', 'b', intvls, asgn, profile)
+    #pc, nc = estimate_true_counts_intvl(i, 'D', 'b', intvls, asgn, profile)
+    pc, nc = estimate_true_counts(i, 'D', 'b', intvls, asgn, profile)
+    #p, n = nn_intvl(i, 'D', 'b', asgn)
+    #pc, nc = profile[intvls[p][1] - 1] if p >= 0 else -1, profile[intvls[n][0]] if n <len(intvls) else -1
     if pc == -1 and nc == -1:
-        pc, nc = estimate_true_counts_intvl(i, 'H', 'b', intvls, asgn, profile)
+        #pc, nc = estimate_true_counts_intvl(i, 'H', 'b', intvls, asgn, profile)
+        pc, nc = estimate_true_counts(i, 'H', 'b', intvls, asgn, profile)
+        #p, n = nn_intvl(i, 'H', 'b', asgn)
+        #pc, nc = profile[intvls[p][1] - 1] if p >= 0 else -1, profile[intvls[n][0]] if n <len(intvls) else -1
         if pc == -1 and nc == -1:
             pc, nc = DEPTHS['D'], DEPTHS['D']
         elif pc == -1:
@@ -25,24 +31,14 @@ def logp_r_short(i, intvls, asgn, profile, DEPTHS, verbose):
         pc = nc
     elif nc == -1:
         nc = pc
-    pc, nc = pc * 1.5, nc * 1.5
+    dr_ratio = 1 + n_sigma * (1 / np.sqrt(DEPTHS['D']))   # X-sigma interval
+    pc, nc = pc * dr_ratio, nc * dr_ratio
     if verbose:
         print(f"[LEFT] R_est={pc}, {profile[ib]} ~ [RIGHT] R_est={nc}, {profile[ie - 1]}")
     if profile[ib] >= pc or profile[ie - 1] >= nc:
         return 0.
     else:
         return binom.logpmf(profile[ib], pc, 1 - 0.01) + binom.logpmf(profile[ie - 1], nc, 1 - 0.01)
-    """
-    logp_max = max(logp_e(i, intvls, asgn, profile, verbose=False),
-                   logp_h(i, intvls, asgn, profile, verbose=False),
-                   logp_d(i, intvls, asgn, profile, verbose=False))
-    if verbose:
-        print(f"logp_max={logp_max}")
-    if logp_max <= -20:
-        return 0.
-    else:
-        return -np.inf
-    """
     
 
 def logp_hd_short2(state, i, intvls, asgn, profile, pread, DEPTHS, verbose, lread=20000):
@@ -111,7 +107,7 @@ def logp_hd_short2(state, i, intvls, asgn, profile, pread, DEPTHS, verbose, lrea
     return max(logp_l, logp_r)
 
 
-def logp_h_short(i, intvls, asgn, profile, pread, DEPTHS, verbose, lread=20000):
+def logp_h_short(i, intvls, asgn, profile, pread, DEPTHS, verbose, lread=20000, n_sigma=2):
     if verbose:
         print("### HAPLO ###")
     # H < D
@@ -120,8 +116,8 @@ def logp_h_short(i, intvls, asgn, profile, pread, DEPTHS, verbose, lread=20000):
     if p >= 0 and n < len(asgn):
         pb, pe = intvls[p]
         nb, ne = intvls[n]
-        if profile[pe - 1] < profile[ib] and profile[nb] < profile[ie - 1]:
-            return -np.inf
+        #if profile[pe - 1] < profile[ib] and profile[nb] < profile[ie - 1]:
+        #    return -np.inf
 
     pc, nc = estimate_true_counts_intvl(i, 'D', 'b', intvls, asgn, profile)
     if pc == -1 and nc == -1:
@@ -136,6 +132,24 @@ def logp_h_short(i, intvls, asgn, profile, pread, DEPTHS, verbose, lread=20000):
             f"[LEFT] H_est={pc}, {profile[ib]} ~ [RIGHT] H_est={nc}, {profile[ie - 1]}")
     if profile[ib] > pc and profile[ie - 1] > nc:
         return -np.inf
+    
+    p, n = nn_intvl(i, 'H', 'b', asgn)
+    pc, nc = profile[intvls[p][1] - 1] if p >= 0 else - \
+        1, profile[intvls[n][0]] if n < len(intvls) else -1
+    if pc == -1 and nc == -1:
+        pc, nc = DEPTHS['H'], DEPTHS['H']
+    elif pc == -1:
+        pc = nc
+    elif nc == -1:
+        nc = pc
+    hd_ratio = 1 + n_sigma * (1 / np.sqrt(DEPTHS['H']))   # X-sigma interval
+    pc, nc = pc * hd_ratio, nc * hd_ratio
+    if verbose:
+        print(
+            f"[LEFT] RH_est={pc}, {profile[ib]} ~ [RIGHT] RH_est={nc}, {profile[ie - 1]}")
+    if profile[ib] >= pc or profile[ie - 1] >= nc:
+        return -np.inf
+
     return logp_hd_short2('H', i, intvls, asgn, profile, pread, DEPTHS, verbose, lread)
 
 
@@ -148,8 +162,8 @@ def logp_d_short(i, intvls, asgn, profile, pread, DEPTHS, verbose, lread=20000):
     if p >= 0 and n < len(asgn):
         pb, pe = intvls[p]
         nb, ne = intvls[n]
-        if profile[pe - 1] > profile[ib] and profile[nb] > profile[ie - 1]:
-            return -np.inf
+        #if profile[pe - 1] > profile[ib] and profile[nb] > profile[ie - 1]:
+        #    return -np.inf
 
     pc, nc = estimate_true_counts_intvl(i, 'H', 'b', intvls, asgn, profile)
     if pc == -1 and nc == -1:
@@ -205,8 +219,10 @@ def check_sparsity(states, wlen=1000, thres_p=0.1):
 
 def get_states(long_merged_smooth_intvls, asgn, profile, merged_intvls, pread, DEPTHS, th_p_normal=0.1, verbose=False):
     lmsi_to_asgn = dict(zip(long_merged_smooth_intvls, asgn))
+    #asgn_merged = [lmsi_to_asgn[intvl]
+    #               if intvl in lmsi_to_asgn and lmsi_to_asgn[intvl] != 'E' else '-' for intvl in merged_intvls]
     asgn_merged = [lmsi_to_asgn[intvl]
-                   if intvl in lmsi_to_asgn and lmsi_to_asgn[intvl] != 'E' else '-' for intvl in merged_intvls]
+                   if intvl in lmsi_to_asgn else '-' for intvl in merged_intvls]
     i_updates = set([i for i, state in enumerate(asgn_merged) if state == '-'])
 
     # TEMP: check entire sparsity

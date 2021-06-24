@@ -8,6 +8,7 @@ def trace_minus(data: Sequence[float],
                 col: str,
                 name: str,
                 min_val: float = 0,
+                use_webgl: bool = True,
                 show_legend: bool = True,
                 show_init: bool = True) -> pl.BaseTraceType:
     return pl.make_hist({i: -x for i, x in enumerate(data) if x >= min_val},
@@ -16,28 +17,31 @@ def trace_minus(data: Sequence[float],
                         col=col,
                         use_lines=True,
                         name=name,
+                        use_webgl=use_webgl,
                         show_legend=show_legend,
                         show_init=show_init)
 
 
 def trace_ctx(pread: ProfiledRead,
               min_vals: Tuple[int, int] = (4, 3, 2),
+              use_webgl: bool = True,
               show_legend: bool = True,
               show_init: bool = True) -> List[pl.BaseTraceType]:
     assert len(min_vals) == len(pread.ctx)
     return [trace_minus(data, col, f"{ctx.emodel.name} length (>={min_val}) [{_type}]", min_val,
-                        show_legend, show_init)
+                        use_webgl, show_legend, show_init)
             for ctx, min_val in zip(pread.ctx, min_vals)
             for data, col, _type in zip(ctx.lens, ctx.emodel.cols, ("drop", "gain"))]
 
 
 def trace_pe(pread: ProfiledRead,
              min_val: float = 1e-5,
+             use_webgl: bool = True,
              show_legend: bool = True,
              show_init: bool = True) -> List[pl.BaseTraceType]:
     return [trace_minus([x * 100 for x in pread.pe["self"][_type]],
                         col, f"%Pr{{error in self}} [{_type}]", min_val,
-                        show_legend, show_init)
+                        use_webgl, show_legend, show_init)
             for _type, col in zip(("drop", "gain"), ("deepskyblue", "deeppink"))]
 
 
@@ -48,6 +52,7 @@ def trace_depth(pread: ProfiledRead,
                 col_thres: str = "tomato",
                 width_thres: float = 2,
                 name: Optional[str] = None,
+                use_webgl: bool = True,
                 show_legend: bool = True,
                 show_init: bool = True) -> List[pl.BaseTraceType]:
     def _trace_depth(depth: int, col: str, width: float, name: str):
@@ -56,6 +61,7 @@ def trace_depth(pread: ProfiledRead,
                              opacity=opacity,
                              name=name,
                              width=width,
+                             use_webgl=use_webgl,
                              show_legend=show_legend,
                              show_init=show_init)
 
@@ -75,6 +81,7 @@ def trace_depth(pread: ProfiledRead,
 
 def trace_ns(pread: ProfiledRead,
              max_count: Optional[int] = None,
+             use_webgl: bool = True,
              show_legend: bool = True,
              show_init: bool = True) -> pl.BaseTraceType:
     if max_count is None:
@@ -85,5 +92,6 @@ def trace_ns(pread: ProfiledRead,
                          col="goldenrod",
                          opacity=0.5,
                          name="Non-smooth points",
+                         use_webgl=use_webgl,
                          show_legend=show_legend,
                          show_init=show_init)

@@ -1,6 +1,6 @@
 import argparse
 from os import getcwd
-from os.path import isfile, join
+from os.path import isfile
 from copy import deepcopy
 from dataclasses import dataclass
 from typing import Optional, List, Dict, Tuple
@@ -13,6 +13,7 @@ import dash_html_components as html
 import dash_core_components as dcc
 from dash.dependencies import Input, Output, State
 from dash.exceptions import PreventUpdate
+from bits.seq import load_fastq
 from bits.util import RelCounter
 import fastk
 from .type import ProfiledRead
@@ -37,9 +38,7 @@ def build_download_button(fname: str, name: str) -> html.Form:
     """Generate a button for downloading a file named `fname`."""
     return html.Form(action=f"download/{fname}",
                      method="get",
-                     children=[html.Button(className="button",
-                                           type="submit",
-                                           children=[name])])
+                     children=[html.Button(children=[name])])
 
 
 @dataclass(repr=False, eq=False)
@@ -49,7 +48,7 @@ class Cache:
     cdv: Optional[CountDistVisualizer] = None
     prv: Optional[ProfiledReadVisualizer] = None
     pread: Optional[ProfiledRead] = None
-    states: Optional[Dict] = None
+    #states: Optional[Dict] = None
 
 
 cache = Cache()
@@ -147,8 +146,10 @@ def update_kmer_profile(_n_clicks_profile: int,
         cache.pread = load_pread(read_id,
                                  cache.args.fastk_prefix,
                                  cache.args.seq_fname)
-        cache.pread.states = (None if cache.states is None
-                              else 'E' * (cache.pread.K - 1) + cache.states[read_id])
+        # cache.pread.states = (None if cache.states is None
+        #                      else 'E' * (cache.pread.K - 1) + cache.states[read_id])
+        cache.pread.states = (None if cache.args.class_fname is None
+                              else load_fastq(cache.args.class_fname, read_id)[0].qual)
         if cache.pread is None:
             raise PreventUpdate
         cache.prv = (ProfiledReadVisualizer(max_count=max_count)
@@ -259,12 +260,14 @@ def parse_args() -> argparse.Namespace:
                   args.seq_fname,
                   args.class_fname]:
         assert fname is None or isfile(fname), f"{fname} does not exist"
+    """
     if args.class_fname is not None:
         cache.states = {}
         with open(args.class_fname, 'r') as f:
             for line in f:
                 read_id, states = line.strip().split('\t')
                 cache.states[int(read_id)] = states
+    """
 
 
 if __name__ == '__main__':

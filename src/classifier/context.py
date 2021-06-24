@@ -1,10 +1,5 @@
-from dataclasses import dataclass
-from typing import Sequence, List, Tuple, Dict
-from copy import deepcopy
-import numpy as np
-from scipy.stats import binom, binom_test, poisson, skellam, norm
-from scipy.special import digamma
-from logzero import logger
+from typing import List, Tuple
+from scipy.stats import binom_test
 from ..type import ProfiledRead, SeqCtx, ErrorModel
 
 
