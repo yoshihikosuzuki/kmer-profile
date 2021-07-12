@@ -1,5 +1,4 @@
-# Labels for 4-class annotation
-STATES = "EHDRN"
+STATES = "EHDR"
 
 STATE_TO_COL = {'E': "magenta",
                 'H': "green",

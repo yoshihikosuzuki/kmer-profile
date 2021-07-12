@@ -46,9 +46,10 @@ class Cache:
     """Cache for data that are needed to be shared over multiple operations."""
     args: argparse.Namespace = None
     cdv: Optional[CountDistVisualizer] = None
-    prv: Optional[ProfiledReadVisualizer] = None
     pread: Optional[ProfiledRead] = None
-    #states: Optional[Dict] = None
+    prv: Optional[ProfiledReadVisualizer] = None
+    tpread: Optional[ProfiledRead] = None
+    tprv: Optional[ProfiledReadVisualizer] = None
 
 
 cache = Cache()
@@ -122,18 +123,21 @@ def update_count_dist(_n_clicks_dist: int,
 
 @app.callback(
     [Output('fig-profile', 'figure'),
+     Output('fig-true-profile', 'figure'),
      Output('download-profile', 'children')],
     [Input('submit-profile', 'n_clicks')],
     [State('read-id', 'value'),
      State('max-count-prof', 'value'),
      State('class-init', 'value'),
-     State('fig-profile', 'figure')]
+     State('fig-profile', 'figure'),
+     State('fig-true-profile', 'figure')]
 )
 def update_kmer_profile(_n_clicks_profile: int,
                         read_id: Optional[str],
                         max_count: Optional[str],
                         class_init: List[str],
-                        fig: go.Figure) -> Tuple[go.Figure, html.Form]:
+                        fig: go.Figure,
+                        tfig: go.Figure) -> Tuple[go.Figure, go.Figure, html.Form]:
     """Update the count profile plot."""
     global cache
     ctx = dash.callback_context
@@ -146,18 +150,28 @@ def update_kmer_profile(_n_clicks_profile: int,
         cache.pread = load_pread(read_id,
                                  cache.args.fastk_prefix,
                                  cache.args.seq_fname)
-        # cache.pread.states = (None if cache.states is None
-        #                      else 'E' * (cache.pread.K - 1) + cache.states[read_id])
         cache.pread.states = (None if cache.args.class_fname is None
                               else load_fastq(cache.args.class_fname, read_id)[0].qual)
         if cache.pread is None:
             raise PreventUpdate
+
         cache.prv = (ProfiledReadVisualizer(max_count=max_count)
                      .add_pread(cache.pread, show_init_states="SHOW" in class_init))
         new_fig = cache.prv.show(layout=reset_axes(fig),
                                  return_fig=True)
+
+        # True profile
+        if cache.args.truth_class_fname is not None:
+            cache.tpread = deepcopy(cache.pread)
+            cache.tpread.states = load_fastq(cache.args.truth_class_fname, read_id)[0].qual
+            cache.tprv = (ProfiledReadVisualizer(max_count=max_count)
+                          .add_pread(cache.tpread, show_init_states="SHOW" in class_init))
+            new_tfig = cache.tprv.show(layout=reset_axes(tfig),
+                                       return_fig=True)
+
         pl.show(new_fig, out_html="kmer_prof.html", do_not_display=True)
         return [new_fig,
+                new_tfig,
                 build_download_button("kmer_prof.html", "Download HTML")]
     raise PreventUpdate
 
@@ -206,12 +220,18 @@ def main():
                   dcc.Checklist(id='class-init',
                                 options=[{'label': 'Show classifications from the beginning',
                                           'value': 'SHOW'}],
-                                value=[])]),
+                                value=(["SHOW"] if cache.args.class_fname is not None else []))]),
         dcc.Graph(id='fig-profile',
                   figure=go.Figure(
                       layout=pl.make_layout(width=1800,
                                             height=500)),
+                  config=dict(toImageButtonOptions=dict(format=cache.args.img_format))),
+        (dcc.Graph(id='fig-true-profile',
+                  figure=go.Figure(
+                      layout=pl.make_layout(width=1800,
+                                            height=500)),
                   config=dict(toImageButtonOptions=dict(format=cache.args.img_format)))
+         if cache.args.truth_class_fname is not None else None)
     ])
     app.run_server(port=int(cache.args.port_number),
                    debug=cache.args.debug_mode)
@@ -238,6 +258,12 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="File name of K-mer classification result. [None]")
     parser.add_argument(
+        "-t",
+        "--truth_class_fname",
+        type=str,
+        default=None,
+        help="File name of ground truth of K-mer classification result. [None]")
+    parser.add_argument(
         "-p",
         "--port_number",
         type=int,
@@ -258,16 +284,9 @@ def parse_args() -> argparse.Namespace:
     for fname in [f"{args.fastk_prefix}.hist",
                   f"{args.fastk_prefix}.prof",
                   args.seq_fname,
-                  args.class_fname]:
+                  args.class_fname,
+                  args.truth_class_fname]:
         assert fname is None or isfile(fname), f"{fname} does not exist"
-    """
-    if args.class_fname is not None:
-        cache.states = {}
-        with open(args.class_fname, 'r') as f:
-            for line in f:
-                read_id, states = line.strip().split('\t')
-                cache.states[int(read_id)] = states
-    """
 
 
 if __name__ == '__main__':

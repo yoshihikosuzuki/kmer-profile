@@ -11,9 +11,13 @@ def trace_minus(data: Sequence[float],
                 use_webgl: bool = True,
                 show_legend: bool = True,
                 show_init: bool = True) -> pl.BaseTraceType:
-    return pl.make_hist({i: -x for i, x in enumerate(data) if x >= min_val},
-                        text=[f"{name} = {round(x, 3)}<br>pos = {i}"
-                              for i, x in enumerate(data) if x >= min_val],
+    _x = {i: -x for i, x in enumerate(data) if x >= min_val}
+    _t = [f"{name} = {round(x, 3)}<br>pos = {i}"
+          for i, x in enumerate(data) if x >= min_val]
+    if len(_x) == 0:
+        return None
+    return pl.make_hist(_x,
+                        text=_t,
                         col=col,
                         use_lines=True,
                         name=name,
@@ -28,10 +32,11 @@ def trace_ctx(pread: ProfiledRead,
               show_legend: bool = True,
               show_init: bool = True) -> List[pl.BaseTraceType]:
     assert len(min_vals) == len(pread.ctx)
-    return [trace_minus(data, col, f"{ctx.emodel.name} length (>={min_val}) [{_type}]", min_val,
-                        use_webgl, show_legend, show_init)
-            for ctx, min_val in zip(pread.ctx, min_vals)
-            for data, col, _type in zip(ctx.lens, ctx.emodel.cols, ("drop", "gain"))]
+    return list(filter(None,
+                       [trace_minus(data, col, f"{ctx.emodel.name} length (>={min_val}) [{_type}]", min_val,
+                                    use_webgl, show_legend, show_init)
+                        for ctx, min_val in zip(pread.ctx, min_vals)
+                        for data, col, _type in zip(ctx.lens, ctx.emodel.cols, ("drop", "gain"))]))
 
 
 def trace_pe(pread: ProfiledRead,

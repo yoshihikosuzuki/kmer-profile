@@ -44,6 +44,6 @@ def load_pread(read_id: int,
         seq = 'N' * len(counts)
     assert len(seq) == len(counts)
     return ProfiledRead(id=read_id,
-                        K=K,
-                        seq=seq,
-                        counts=counts)
+                            K=K,
+                            seq=seq,
+                            counts=counts)

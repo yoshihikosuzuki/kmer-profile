@@ -60,7 +60,7 @@ class ProfiledReadVisualizer:
         x = list(range(len(counts)))
         y = (counts if self.max_count is None
              else [min(self.max_count, c) for c in counts])
-        text = ([f"pos = {i}, count = {c}<br>"
+        text = ([f"pos = {i} ({i-K+1}), count = {c}<br>"
                  f"k-mer = {seq[i - K + 1:i + 1] if i >= K - 1 else '-'}<br>"
                  f"-(k-1) pos = {i-K+1}, +(k-1) pos = {i+K-1}"
                  for i, c in enumerate(counts)] if seq is not None and K is not None
@@ -109,7 +109,7 @@ class ProfiledReadVisualizer:
                    show_init: bool = False) -> ProfiledReadVisualizer:
         state_pos = defaultdict(list)
         for i, s in enumerate(states):
-            assert s in STATES, "Invalid state character"
+            assert s in STATE_TO_COL, "Invalid state character"
             state_pos[s].append(i)
         self.traces += \
             [pl.make_scatter(x=pos_list,
