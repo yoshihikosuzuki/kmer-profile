@@ -1,11 +1,10 @@
 from __future__ import annotations
 from dataclasses import dataclass, field
-from typing import Union, Optional, Sequence, List, Tuple
+from typing import Optional, List, Tuple
 from collections import defaultdict
 import plotly.graph_objects as go
-from plotly.basedatatypes import BaseTraceType
 import plotly_light as pl
-from ..type import STATES, STATE_TO_COL, ProfiledRead
+from ..type import STATE_TO_COL, ProfiledRead
 
 
 @dataclass
@@ -14,12 +13,17 @@ class ProfiledReadVisualizer:
     width: Optional[int] = None
     height: Optional[int] = None
     show_legend: bool = True
-    use_webgl: bool = True
+    use_webgl: bool = False
     traces: pl.Traces = field(default_factory=list)
 
     def __post_init__(self):
         if not isinstance(self.traces, list):
             self.traces = [self.traces]
+
+    def add_traces(self,
+                   traces: pl.Traces) -> ProfiledReadVisualizer:
+        self.traces += traces if isinstance(traces, list) else [traces]
+        return self
 
     def add_pread(self,
                   pread: ProfiledRead,
@@ -28,18 +32,14 @@ class ProfiledReadVisualizer:
                   show_init_counts: bool = True,
                   show_init_bases: bool = False,
                   show_init_states: bool = False) -> ProfiledReadVisualizer:
-        """Utility for simultaneously adding counts, bases, and states when a
-        profiled read is available.
-        """
         self.add_counts(pread.counts,
-                        pread.seq,
+                        pread._seq,
                         pread.K,
                         col,
                         show_legend=show_legend,
                         show_init=show_init_counts)
         self.add_bases(pread.seq,
                        pread.counts,
-                       col,
                        show_legend=show_legend,
                        show_init=show_init_bases)
         if pread.states is not None:
@@ -51,7 +51,7 @@ class ProfiledReadVisualizer:
 
     def add_counts(self,
                    counts: List[int],
-                   seq: Optional[str] = None,
+                   _seq: Optional[str] = None,
                    K: Optional[int] = None,
                    col: str = "black",
                    name: str = "Counts",
@@ -60,12 +60,14 @@ class ProfiledReadVisualizer:
         x = list(range(len(counts)))
         y = (counts if self.max_count is None
              else [min(self.max_count, c) for c in counts])
-        text = ([f"pos = {i} ({i-K+1}), count = {c}<br>"
-                 f"k-mer = {seq[i - K + 1:i + 1] if i >= K - 1 else '-'}<br>"
-                 f"-(k-1) pos = {i-K+1}, +(k-1) pos = {i+K-1}"
-                 for i, c in enumerate(counts)] if seq is not None and K is not None
-                else None)
-        self.traces += \
+        if _seq is None or K is None:
+            text = None
+        else:
+            assert len(_seq) == len(counts) + K - 1
+            text = [f"pos = {i} (-(k-1)={i-K+1}, +(k-1)={i+K-1}), count = {c}<br>"
+                    f"k-mer = {_seq[i:i + K]}<br>"
+                    for i, c in enumerate(counts)]
+        return self.add_traces(
             [pl.make_scatter(x=x, y=y, text=text,
                              mode="lines",
                              col=col,
@@ -79,28 +81,26 @@ class ProfiledReadVisualizer:
                              name=name,
                              show_legend=show_legend,
                              show_init=False,
-                             use_webgl=self.use_webgl)]
-        return self
+                             use_webgl=self.use_webgl)])
 
     def add_bases(self,
                   seq: str,
                   counts: List[int],
-                  col: str = "black",
                   name: str = "Bases",
                   show_legend: bool = True,
                   show_init: bool = False) -> ProfiledReadVisualizer:
-        self.traces.append(
+        return self.add_traces(
             pl.make_scatter(x=list(range(len(seq))),
                             y=(counts if self.max_count is None
                                else [min(self.max_count, c) for c in counts]),
                             text=list(seq),
+                            text_col="black",
                             text_pos="top center",
                             mode="text",
                             name=name,
                             show_legend=show_legend,
                             show_init=show_init,
                             use_webgl=self.use_webgl))
-        return self
 
     def add_states(self,
                    states: List[str],
@@ -111,10 +111,10 @@ class ProfiledReadVisualizer:
         for i, s in enumerate(states):
             assert s in STATE_TO_COL, "Invalid state character"
             state_pos[s].append(i)
-        self.traces += \
+        return self.add_traces(
             [pl.make_scatter(x=pos_list,
                              y=[(counts[i] if self.max_count is None
-                                 else min(self.max_count, counts[i]))
+                                else min(self.max_count, counts[i]))
                                 for i in pos_list],
                              mode="markers",
                              marker_size=4,
@@ -123,8 +123,7 @@ class ProfiledReadVisualizer:
                              show_legend=show_legend,
                              show_init=show_init,
                              use_webgl=self.use_webgl)
-             for state, pos_list in state_pos.items()]
-        return self
+             for state, pos_list in state_pos.items()])
 
     def add_intvls(self,
                    intvls: List[Tuple[int, int]],
@@ -134,7 +133,7 @@ class ProfiledReadVisualizer:
                    name: str = "Intervals",
                    show_legend: bool = True,
                    show_init: bool = True) -> ProfiledReadVisualizer:
-        self.traces.append(
+        return self.add_traces(
             pl.make_scatter([x for b, e in intvls for x in [b, e - 1, None]],
                             [(counts[x] if self.max_count is None
                               else min(self.max_count, counts[x]))
@@ -148,30 +147,16 @@ class ProfiledReadVisualizer:
                             name=name,
                             show_legend=show_legend,
                             show_init=show_init))
-        if states is not None:
-            self.traces.append(
-                pl.make_scatter([x for b, e in intvls for x in [b, e - 1]],
-                                [(counts[x] if self.max_count is None
-                                  else min(self.max_count, counts[x]))
-                                 for b, e in intvls for x in [b, e - 1]],
-                                col=[STATE_TO_COL[s] for s in states for _ in range(2)]))
-        return self
-
-    def add_traces(self,
-                   traces: pl.Traces) -> ProfiledReadVisualizer:
-        if isinstance(traces, list):
-            self.traces += traces
-        else:
-            self.traces.append(traces)
-        return self
 
     def show(self,
+             max_count_zoom: Optional[int] = 100,
              layout: Optional[go.Layout] = None,
              return_fig: bool = False) -> Optional[go.Figure]:
         """
         optional arguments:
-          @ layout : For any additional layouts.
-          @ return_fig : If True, return go.Figure object.
+          @ max_count_zoom : If not None, make a button zooming in to [0,`max_count_zoom`].
+          @ layout         : Additional layout.
+          @ return_fig     : If True, return a `go.Figure` object.
         """
         _layout = pl.make_layout(width=self.width,
                                  height=self.height,
@@ -182,10 +167,11 @@ class ProfiledReadVisualizer:
                                  y_grid=False)
         fig = pl.make_figure(self.traces,
                              pl.merge_layout(layout, _layout))
-        fig.update_layout(
-            updatemenus=[dict(type="buttons",
-                              buttons=[dict(label="<100",
-                                            method="relayout",
-                                            args=[{"yaxis.range[0]": 0,
-                                                   "yaxis.range[1]": 101}])])])
+        if max_count_zoom is not None and (self.max_count is None or max_count_zoom < self.max_count):
+            fig.update_layout(
+                updatemenus=[dict(type="buttons",
+                                  buttons=[dict(label=f"<{max_count_zoom}",
+                                                method="relayout",
+                                                args=[{"yaxis.range[0]": 0,
+                                                       "yaxis.range[1]": max_count_zoom + 1}])])])
         return fig if return_fig else pl.show(fig)
