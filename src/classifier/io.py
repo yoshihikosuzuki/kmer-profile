@@ -2,20 +2,7 @@ from os.path import splitext
 from typing import Union, Optional
 from bits.seq import FastaRecord, FastqRecord, DazzRecord, load_db, load_fasta, load_fastq
 import fastk
-from ..type import ProfiledRead, ErrorModel
-from .context import calc_seq_ctx
-
-
-def get_pread(read_id: int,
-              fastk_prefix: str,
-              seq_fname: str,
-              hp_emodel: ErrorModel,
-              ds_emodel: ErrorModel,
-              ts_emodel: ErrorModel) -> ProfiledRead:
-    """Load a read and calculate feature lengths of sequence contexts."""
-    pread = load_pread(read_id, fastk_prefix, seq_fname)
-    pread.ctx = calc_seq_ctx(pread._seq, pread.K, hp_emodel, ds_emodel, ts_emodel)
-    return pread
+from ..type import ProfiledRead
 
 
 Read = Union[FastaRecord, FastqRecord, DazzRecord]

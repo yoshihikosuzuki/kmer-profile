@@ -133,7 +133,7 @@ class ProfiledReadVisualizer:
                    name: str = "Intervals",
                    show_legend: bool = True,
                    show_init: bool = True) -> ProfiledReadVisualizer:
-        return self.add_traces(
+        traces = [
             pl.make_scatter([x for b, e in intvls for x in [b, e - 1, None]],
                             [(counts[x] if self.max_count is None
                               else min(self.max_count, counts[x]))
@@ -146,7 +146,15 @@ class ProfiledReadVisualizer:
                             col=col,
                             name=name,
                             show_legend=show_legend,
-                            show_init=show_init))
+                            show_init=show_init)]
+        if states is not None:
+            traces.append(
+                pl.make_scatter([x for b, e in intvls for x in [b, e - 1]],
+                                [(counts[x] if self.max_count is None
+                                  else min(self.max_count, counts[x]))
+                                 for b, e in intvls for x in [b, e - 1]],
+                                col=[STATE_TO_COL[s] for s in states for _ in range(2)]))
+        return self.add_traces(traces)
 
     def show(self,
              max_count_zoom: Optional[int] = 100,
