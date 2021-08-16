@@ -166,15 +166,15 @@ class ProfiledReadVisualizer:
           @ layout         : Additional layout.
           @ return_fig     : If True, return a `go.Figure` object.
         """
-        _layout = pl.make_layout(width=self.width,
-                                 height=self.height,
-                                 x_title="Position",
-                                 y_title=("K-mer count" if self.max_count is None
-                                          else f"K-mer count (capped at {self.max_count})"),
-                                 x_grid=False,
-                                 y_grid=False)
+        default_layout = pl.layout(x_title="Position",
+                                   y_title=("K-mer count" if self.max_count is None
+                                            else f"K-mer count (capped at {self.max_count})"),
+                                   x_grid=False,
+                                   y_grid=False)
+        fixed_layout = pl.make_layout(width=self.width,
+                                      height=self.height)
         fig = pl.make_figure(self.traces,
-                             pl.merge_layout(layout, _layout))
+                             pl.merge_layout(default_layout, layout, fixed_layout))
         if max_count_zoom is not None and (self.max_count is None or max_count_zoom < self.max_count):
             fig.update_layout(
                 updatemenus=[dict(type="buttons",

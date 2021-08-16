@@ -16,7 +16,7 @@ def load_read(seq_fname: str,
     load_func = (load_fasta if ext == ".fasta"
                  else load_fastq if ext == ".fastq"
                  else load_db)
-    return load_func(seq_fname, read_id, case)[0]
+    return load_func(seq_fname, read_id, case)
 
 
 def load_pread(read_id: int,

@@ -151,7 +151,7 @@ def update_kmer_profile(_n_clicks_profile: int,
                                  cache.args.fastk_prefix,
                                  cache.args.seq_fname)
         cache.pread.states = (None if cache.args.class_fname is None
-                              else load_fastq(cache.args.class_fname, read_id)[0].qual)
+                              else load_fastq(cache.args.class_fname, read_id).qual)
         if cache.pread is None:
             raise PreventUpdate
 
@@ -163,7 +163,7 @@ def update_kmer_profile(_n_clicks_profile: int,
         # True profile
         if cache.args.truth_class_fname is not None:
             cache.tpread = deepcopy(cache.pread)
-            cache.tpread.states = load_fastq(cache.args.truth_class_fname, read_id)[0].qual
+            cache.tpread.states = load_fastq(cache.args.truth_class_fname, read_id).qual
             cache.tprv = (ProfiledReadVisualizer(max_count=max_count)
                           .add_pread(cache.tpread, show_init_states="SHOW" in class_init))
             new_tfig = cache.tprv.show(layout=reset_axes(tfig),
