@@ -3,8 +3,7 @@ from os import getcwd
 from os.path import isfile
 from copy import deepcopy
 from dataclasses import dataclass
-from typing import Optional, List, Dict, Tuple
-from logzero import logger
+from typing import Optional, List, Tuple
 import plotly.graph_objects as go
 import plotly_light as pl
 from flask import Flask, send_from_directory
@@ -16,9 +15,7 @@ from dash.exceptions import PreventUpdate
 from bits.seq import load_fastq
 from bits.util import RelCounter
 import fastk
-from .type import ProfiledRead
-from .classifier import load_pread
-from .visualizer import CountDistVisualizer, ProfiledReadVisualizer
+from . import ProfiledRead, CountHistVisualizer, ProfiledReadVisualizer, load_pread
 
 server = Flask(__name__)
 app = dash.Dash(__name__,
@@ -45,7 +42,7 @@ def build_download_button(fname: str, name: str) -> html.Form:
 class Cache:
     """Cache for data that are needed to be shared over multiple operations."""
     args: argparse.Namespace = None
-    cdv: Optional[CountDistVisualizer] = None
+    cdv: Optional[CountHistVisualizer] = None
     pread: Optional[ProfiledRead] = None
     prv: Optional[ProfiledReadVisualizer] = None
     tpread: Optional[ProfiledRead] = None
@@ -95,7 +92,7 @@ def update_count_dist(_n_clicks_dist: int,
     if (not ctx.triggered
             or ctx.triggered[0]["prop_id"] == "submit-dist.n_clicks"):
         # Global k-mer count distribution
-        cache.cdv = CountDistVisualizer(relative=True)
+        cache.cdv = CountHistVisualizer(relative=True)
         cache.cdv.add_trace(fastk.histex(cache.args.fastk_prefix,
                                          max_count=max_count),
                             col="gray",

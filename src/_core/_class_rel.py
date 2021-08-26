@@ -1,8 +1,8 @@
-from typing import Union, Sequence, List, Tuple, Dict
+from typing import Union, List
 import numpy as np
-from scipy.stats import binom, binom_test, poisson, skellam, norm
+from scipy.stats import binom, poisson, skellam
 from logzero import logger
-from ..type import STATES
+from .. import STATES
 
 
 def assign_init(intvls, profile, depths):

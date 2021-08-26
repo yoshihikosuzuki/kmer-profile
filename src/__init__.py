@@ -1,3 +1,3 @@
-from .type import *
-from .classifier import *
-from .visualizer import *
+from ._type import *
+from ._core import *
+from ._plot import *

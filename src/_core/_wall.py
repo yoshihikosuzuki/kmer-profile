@@ -1,9 +1,103 @@
 from typing import Tuple, Dict
 from copy import deepcopy
 import numpy as np
-from scipy.stats import skellam
+from scipy.stats import binom_test, skellam
 from logzero import logger
-from ..type import ProfiledRead
+from .. import ProfiledRead, SeqCtx
+
+
+def calc_p_errors(pread: ProfiledRead) -> None:
+    pread.pe = {error_type: {change_type: [max(p_list)
+                                           for p_list in zip(*[[calc_p_error(i, pread, ctx, error_type, change_type)
+                                                                for i in range(pread.length)]
+                                                               for ctx in pread.ctx])]
+                             for change_type in ("drop", "gain")}
+                for error_type in ("self", "others")}
+
+
+def calc_p_error(i: int,
+                 pread: ProfiledRead,
+                 ctx: SeqCtx,
+                 error_type: str,
+                 change_type: str) -> float:
+    """Compute the probability that the count [drop|gain] at (i-1) -> i
+    is because of error(s) in [self|others].
+
+    positional argument:
+      @ i     : Position index.
+      @ pread : Profiled read.
+      @ ctx   : Sequence context feature vectors. Element in `pread.ctx`.
+      @ error_type  : Must be one of {"self", "others"}.
+      @ change_type : Must be one of {"drop", "gain"}.
+    """
+    # TODO: Is it OK to take max among context types within this function?
+    assert change_type in ("drop", "gain")
+    assert error_type in ("self", "others")
+    # NOTE: If the count data is invalid, set Pr=0 for error in self
+    #       and Pr=1 for errors in others
+    p_invalid = 0. if error_type == "self" else 1.
+    if not (0 < i and i < pread.length):
+        return p_invalid
+    cp, ci = pread.counts[i - 1:i + 1]
+    if change_type == "drop":
+        if cp <= ci:   # not a drop
+            return p_invalid
+        return binom_test(ci if error_type == "self" else cp - ci,
+                          cp,
+                          ctx.erates[0][i - 1],
+                          alternative="greater")
+    else:
+        if cp >= ci:   # not a gain
+            return p_invalid
+        return binom_test(cp if error_type == "self" else ci - cp,
+                          ci,
+                          ctx.erates[1][i],
+                          alternative="greater")
+
+
+def recalc_p_errors(pread):
+    pread.corrected_pe = {error_type: {change_type: [max(p_list)
+                                                     for p_list in zip(*[[recalc_p_error(i, pread, ctx, error_type, change_type)
+                                                                          for i in range(pread.length)]
+                                                                         for ctx in pread.ctx])]
+                                       for change_type in ("drop", "gain")}
+                          for error_type in ("self", "others")}
+
+
+def recalc_p_error(i, pread, ctx, error_type, change_type) -> float:
+    """Compute the probability that the count [drop|gain] at (i-1) -> i
+    is because of error(s) in [self|others].
+
+    positional argument:
+      @ i     : Position index.
+      @ pread : Profiled read.
+      @ ctx   : Sequence context feature vectors. Element in `pread.ctx`.
+      @ error_type  : Must be one of {"self", "others"}.
+      @ change_type : Must be one of {"drop", "gain"}.
+    """
+    # TODO: Is it OK to take max among context types within this function?
+    assert change_type in ("drop", "gain")
+    assert error_type in ("self", "others")
+    # NOTE: If the count data is invalid, set Pr=0 for error in self
+    #       and Pr=1 for errors in others
+    p_invalid = 0. if error_type == "self" else 1.
+    if not (0 < i and i < pread.length):
+        return p_invalid
+    cp, ci = pread.corrected_counts[i - 1:i + 1]
+    if change_type == "drop":
+        if cp <= ci:   # not a drop
+            return p_invalid
+        return binom_test(ci if error_type == "self" else cp - ci,
+                          cp,
+                          ctx.erates[0][i - 1],
+                          alternative="greater")
+    else:
+        if cp >= ci:   # not a gain
+            return p_invalid
+        return binom_test(cp if error_type == "self" else ci - cp,
+                          ci,
+                          ctx.erates[1][i],
+                          alternative="greater")
 
 
 def find_ns_points(pread: ProfiledRead,

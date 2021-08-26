@@ -2,7 +2,7 @@ from os.path import splitext
 from typing import Union, Optional
 from bits.seq import FastaRecord, FastqRecord, DazzRecord, load_db, load_fasta, load_fastq
 import fastk
-from ..type import ProfiledRead
+from .. import ProfiledRead
 
 
 Read = Union[FastaRecord, FastqRecord, DazzRecord]

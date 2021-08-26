@@ -1,4 +1,4 @@
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Optional, List
 from bits.seq import ExplicitRepr
 from bits.util import RelCounter
@@ -22,12 +22,12 @@ class ProfiledRead(ExplicitRepr):
     instance variables:
       @ length : Length of the count profile (i.e. shorter than original read length).
     """
-    _seq: str
-    id: int
-    K: int
+    _seq:   str
+    id:     int
+    K:      int
     counts: List[int]
     states: Optional[List[str]] = None
-    name: Optional[str] = None
+    name:   Optional[str] = None
 
     @property
     def seq(self) -> str:

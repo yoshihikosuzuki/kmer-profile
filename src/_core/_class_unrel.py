@@ -1,9 +1,8 @@
-from typing import Sequence, List, Tuple, Dict
 import numpy as np
-from scipy.stats import binom, binom_test, poisson, skellam, norm
+from scipy.stats import binom, poisson, skellam
 from logzero import logger
-from ..type import STATES
-from .classifiy_reliable import nn_intvl, estimate_true_counts, estimate_true_counts_intvl, logp_e
+from .. import STATES
+from ._class_rel import nn_intvl, estimate_true_counts, estimate_true_counts_intvl, logp_e
 
 
 def logp_r_short(i, intvls, asgn, profile, DEPTHS, verbose, n_sigma=1):

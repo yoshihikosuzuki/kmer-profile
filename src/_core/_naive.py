@@ -1,4 +1,4 @@
-from typing import Optional, Sequence, List, Tuple, Dict
+from typing import Optional, Sequence, Tuple, Dict
 from logzero import logger
 from bits.util import RelCounter
 

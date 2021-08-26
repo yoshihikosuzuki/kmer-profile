@@ -1,14 +1,14 @@
 from __future__ import annotations
 from dataclasses import dataclass, field
-from typing import Union, Optional, Sequence, List
-from collections import defaultdict, Counter
+from typing import Union, Optional
+from collections import Counter
 import plotly.graph_objects as go
 import plotly_light as pl
 from bits.util import RelCounter
 
 
 @dataclass
-class CountDistVisualizer:
+class CountHistVisualizer:
     width: Optional[int] = 700
     height: Optional[int] = 500
     relative: bool = False
@@ -25,7 +25,7 @@ class CountDistVisualizer:
                   count_freqs: Union[Counter, RelCounter],
                   col: Optional[str] = None,
                   opacity: float = 1,
-                  name: Optional[str] = None) -> CountDistVisualizer:
+                  name: Optional[str] = None) -> CountHistVisualizer:
         """
         positional arguments:
           @ count_freqs : Count distribution.

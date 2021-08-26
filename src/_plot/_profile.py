@@ -4,7 +4,8 @@ from typing import Optional, List, Tuple
 from collections import defaultdict
 import plotly.graph_objects as go
 import plotly_light as pl
-from ..type import STATE_TO_COL, ProfiledRead
+from .. import ProfiledRead
+from ._color import S_TO_COL
 
 
 @dataclass
@@ -109,7 +110,7 @@ class ProfiledReadVisualizer:
                    show_init: bool = False) -> ProfiledReadVisualizer:
         state_pos = defaultdict(list)
         for i, s in enumerate(states):
-            assert s in STATE_TO_COL, "Invalid state character"
+            assert s in S_TO_COL, "Invalid state character"
             state_pos[s].append(i)
         return self.add_traces(
             [pl.make_scatter(x=pos_list,
@@ -118,7 +119,7 @@ class ProfiledReadVisualizer:
                                 for i in pos_list],
                              mode="markers",
                              marker_size=4,
-                             col=STATE_TO_COL[state],
+                             col=S_TO_COL[state],
                              name=state,
                              show_legend=show_legend,
                              show_init=show_init,
@@ -153,7 +154,7 @@ class ProfiledReadVisualizer:
                                 [(counts[x] if self.max_count is None
                                   else min(self.max_count, counts[x]))
                                  for b, e in intvls for x in [b, e - 1]],
-                                col=[STATE_TO_COL[s] for s in states for _ in range(2)]))
+                                col=[S_TO_COL[s] for s in states for _ in range(2)]))
         return self.add_traces(traces)
 
     def show(self,

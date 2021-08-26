@@ -1,7 +1,7 @@
 from typing import Optional, Sequence, List, Tuple, Dict
-from logzero import logger
 import plotly_light as pl
-from ..type import STATE_TO_COL, ProfiledRead, SeqCtx, ErrorModel
+from .. import ProfiledRead
+from ._color import S_TO_COL
 
 
 def trace_minus(data: Sequence[float],
@@ -71,7 +71,7 @@ def trace_depth(pread: ProfiledRead,
                              show_init=show_init)
 
     traces = [_trace_depth(depths[s],
-                           STATE_TO_COL[s],
+                           S_TO_COL[s],
                            1,
                            f"{s} {'' if name is None else name} depth")
               for s in ('H', 'D')]
@@ -94,9 +94,9 @@ def trace_ns(pread: ProfiledRead,
     return pl.make_lines([(i, 0, i, max_count) for i, ns in enumerate(pread.ns) if ns],
                          text=[f"{pread.counts[i - 1]}@{i - 1}->{pread.counts[i]}@{i}"
                                for i, ns in enumerate(pread.ns) if ns],
-                         col="goldenrod",
-                         opacity=0.5,
-                         name="Non-smooth points",
+                         col="gold",
+                         opacity=0.6,
+                         name="Walls",
                          use_webgl=use_webgl,
                          show_legend=show_legend,
                          show_init=show_init)
