@@ -2,9 +2,6 @@ from dataclasses import dataclass, field
 from typing import Tuple
 from bits.util import RelCounter
 import fastk
-# from ._type import STATES, Ctype, ErrorModel, CountThres
-# from ._const import ERR_PARAMS
-# from ._core import find_depths_and_thres, calc_cthres, load_pread, calc_seq_ctx, find_walls
 import kmer_profiler as kp
 
 
@@ -42,6 +39,7 @@ def classify_read(read_id: int,
     kp.find_walls(pread, cp, verbose=verbose)
 
     # Find reliable intervals and correct wall counts
+    kp.find_rel_intvls(pread, cp, verbose=verbose)
 
     # Classify reliable intervals
 

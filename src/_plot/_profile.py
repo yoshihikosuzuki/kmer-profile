@@ -1,21 +1,21 @@
 from __future__ import annotations
 from dataclasses import dataclass, field
-from typing import Optional, List, Tuple
+from typing import Optional, List
 from collections import defaultdict
 import plotly.graph_objects as go
 import plotly_light as pl
-from .. import ProfiledRead
+from .. import Intvl, ProfiledRead
 from ._color import S_TO_COL
 
 
 @dataclass
 class ProfiledReadVisualizer:
-    max_count: Optional[int] = None
-    width: Optional[int] = None
-    height: Optional[int] = None
+    max_count:   Optional[int] = None
+    width:       Optional[int] = None
+    height:      Optional[int] = None
     show_legend: bool = True
-    use_webgl: bool = False
-    traces: pl.Traces = field(default_factory=list)
+    use_webgl:   bool = False
+    traces:      pl.Traces = field(default_factory=list)
 
     def __post_init__(self):
         if not isinstance(self.traces, list):
@@ -127,34 +127,36 @@ class ProfiledReadVisualizer:
              for state, pos_list in state_pos.items()])
 
     def add_intvls(self,
-                   intvls: List[Tuple[int, int]],
-                   counts: List[int],
-                   states: Optional[List[str]] = None,
+                   intvls: List[Intvl],
+                   use_corrected_counts: bool = False,
                    col: str = "black",
                    name: str = "Intervals",
+                   show_asgn: bool = False,
                    show_legend: bool = True,
                    show_init: bool = True) -> ProfiledReadVisualizer:
-        traces = [
-            pl.make_scatter([x for I in intvls for x in [I.b, I.e - 1, None]],
-                            [(counts[x] if self.max_count is None
-                              else min(self.max_count, counts[x]))
-                             if x is not None else None
-                             for I in intvls for x in [I.b, I.e - 1, None]],
-                            text=[f"intvls[{i}] @{x} ({counts[x]}; pe={I.pe:7f})" if x is not None else None
-                                  for i, I in enumerate(intvls)
-                                  for x in [I.b, I.e - 1, None]],
-                            mode="markers+lines",
-                            col=col,
-                            name=name,
-                            show_legend=show_legend,
-                            show_init=show_init)]
-        if states is not None:
+        x, y, t = [None] * (len(intvls) * 3), [None] * (len(intvls) * 3), [None] * (len(intvls) * 3)
+        for i, I in enumerate(intvls):
+            for j, (p, c) in enumerate([(I.b, I.cb if not use_corrected_counts else I.ccb),
+                                        (I.e - 1, I.ce if not use_corrected_counts else I.cce)]):
+                idx = 3 * i + j
+                x[idx] = p
+                y[idx] = c if self.max_count is None else min(self.max_count, c)
+                t[idx] = f"intvls[{i}] @{p} ({c}; pe={I.pe:7f})"
+
+        traces = [pl.make_scatter(x, y, t,
+                                  mode="markers+lines",
+                                  col=col,
+                                  name=name,
+                                  show_legend=show_legend,
+                                  show_init=show_init)]
+        if show_asgn:
             traces.append(
                 pl.make_scatter([x for I in intvls for x in [I.b, I.e - 1]],
-                                [(counts[x] if self.max_count is None
-                                  else min(self.max_count, counts[x]))
-                                 for I in intvls for x in [I.b, I.e - 1]],
-                                col=[S_TO_COL[s] for s in states for _ in range(2)]))
+                                [c if self.max_count is None else min(self.max_count, c)
+                                 for I in intvls
+                                 for c in [I.cb if not use_corrected_counts else I.ccb,
+                                           I.ce if not use_corrected_counts else I.cce]],
+                                col=[S_TO_COL[I.asgn] for I in intvls for _ in range(2)]))
         return self.add_traces(traces)
 
     def show(self,

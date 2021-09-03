@@ -1,7 +1,7 @@
-from typing import Optional, Sequence, List, Tuple, Dict
+from typing import Optional, Union, Sequence, List, Tuple, Dict
 import plotly_light as pl
-from .. import STATES, ProfiledRead, Ctype, Etype, Wtype
-from .._const import CTX_NAMES, ERR_NAMES, WALL_NAMES
+from .. import STATES, ProfiledRead, Ctype, Intvl, ErrorIntvl
+from .._const import CTX_NAMES, WALL_NAMES
 from ._color import S_TO_COL
 
 
@@ -77,18 +77,6 @@ def trace_ctx(pread: ProfiledRead,
                         for data, col, wtype in zip(ctx, ctx_cols, WALL_NAMES)]))
 
 
-# def trace_pe(pread: ProfiledRead,
-#              min_val: float = 1e-5,
-#              cols: Tuple[len(Wtype) * (str,)] = ("deepskyblue", "deeppink"),
-#              use_webgl: bool = True,
-#              show_legend: bool = True,
-#              show_init: bool = True) -> List[pl.BaseTraceType]:
-#     return [trace_minus([x * 100 for x in pread.pe[Etype.SELF][w.value]],
-#                         col, f"%Pr{{error in self}} [{wtype}]", min_val,
-#                         use_webgl, show_legend, show_init)
-#             for w, wtype, col in zip(Wtype, WALL_NAMES, cols)]
-
-
 def trace_wall(pread: ProfiledRead,
                max_count: Optional[int] = None,
                col: str = "gold",
@@ -108,3 +96,38 @@ def trace_wall(pread: ProfiledRead,
                          use_webgl=use_webgl,
                          show_legend=show_legend,
                          show_init=show_init)
+
+
+def trace_intvl(pread: ProfiledRead,
+                intvls: List[Union[Intvl, ErrorIntvl]],
+                states: Optional[List[str]] = None,
+                max_count: Optional[int] = None,
+                col: str = "black",
+                name: str = "Intervals",
+                show_legend: bool = True,
+                show_init: bool = True) -> pl.BaseTraceType:
+    """Interval trace generater for `ErrorIntvl` objects.
+    Only `I.b` and `I.e` are required.
+    """
+    traces = [
+        pl.make_scatter([x for I in intvls for x in [I.b, I.e - 1, None]],
+                        [(pread.counts[x] if max_count is None
+                            else min(max_count, pread.counts[x]))
+                            if x is not None else None
+                            for I in intvls for x in [I.b, I.e - 1, None]],
+                        text=[f"intvls[{i}] @{x} ({pread.counts[x]})" if x is not None else None
+                              for i, I in enumerate(intvls)
+                              for x in [I.b, I.e - 1, None]],
+                        mode="markers+lines",
+                        col=col,
+                        name=name,
+                        show_legend=show_legend,
+                        show_init=show_init)]
+    if states is not None:
+        traces.append(
+            pl.make_scatter([x for I in intvls for x in [I.b, I.e - 1]],
+                            [(pread.counts[x] if max_count is None
+                                else min(max_count, pread.counts[x]))
+                                for I in intvls for x in [I.b, I.e - 1]],
+                            col=[S_TO_COL[s] for s in states for _ in range(2)]))
+    return traces

@@ -1,8 +1,8 @@
-from logzero import logger
 from typing import Dict
 import numpy as np
-from .._type import Etype, Ctype, Wtype, ThresT, ErrorIntvl, Intvl, ProfiledRead
-from .._const import PE_THRES, PTHRES_DIFF, MAX_N_HC
+from logzero import logger
+from .. import (Etype, Ctype, Wtype, ThresT, ErrorIntvl, Intvl, ProfiledRead,
+                READ_LEN, PE_THRES, PTHRES_DIFF_EO, PTHRES_DIFF_REL, MAX_N_HC)
 from .._main import ClassParams
 from ._util import calc_p_error, calc_p_trans
 
@@ -42,11 +42,11 @@ def calc_cthres(cp: ClassParams,
     return cthres
 
 
-def calc_p_diff_pair(i, j, pread, rlen=20000):
+def calc_p_diff_pair(i, j, pread):
     n_drop = pread.counts[i - 1] - pread.counts[i]
     n_gain = pread.counts[j] - pread.counts[j - 1]
     cov = max(pread.counts[i - 1], pread.counts[j])
-    return calc_p_trans(i, j, n_drop, n_gain, cov, rlen)
+    return calc_p_trans(i, j, n_drop, n_gain, cov, READ_LEN)
 
 
 def cthres_ng(cin, cthres, key, etype):
@@ -82,7 +82,7 @@ def find_gain(pread, cp, perrors, i, etype, cout, cin, ctype, clen, cerate, verb
             ct_key_j = (ctype, clen, cout_j, etype)
             if not (ct_key_j in cthres and cthres_ng(cin_j, cthres, ct_key_j, etype)):
                 if (etype == Etype.SELF
-                        or calc_p_diff_pair(i, j, pread) >= PTHRES_DIFF):
+                        or calc_p_diff_pair(i, j, pread) >= PTHRES_DIFF_EO):
                     update_perror(perrors, j, etype, Wtype.GAIN,
                                   cout_j, cin_j, cerate)
                     pe = (perrors[i, etype, Wtype.DROP] *
@@ -110,7 +110,7 @@ def find_gain(pread, cp, perrors, i, etype, cout, cin, ctype, clen, cerate, verb
             continue
 
         if (etype == Etype.SELF
-                or calc_p_diff_pair(i, j, pread) < PTHRES_DIFF):
+                or calc_p_diff_pair(i, j, pread) < PTHRES_DIFF_EO):
             continue
 
         pe_i = calc_p_error(cout, cin, HC_ERATE, etype)
@@ -150,7 +150,7 @@ def find_drop(pread, cp, perrors, i, etype, cout, cin, ctype, clen, cerate, verb
             ct_key_j = (ctype, clen, cout_j, etype)
             if not (ct_key_j in cthres and cthres_ng(cin_j, cthres, ct_key_j, etype)):
                 if (etype == Etype.SELF
-                        or calc_p_diff_pair(j, i, pread) >= PTHRES_DIFF):
+                        or calc_p_diff_pair(j, i, pread) >= PTHRES_DIFF_EO):
                     update_perror(perrors, j, etype, Wtype.DROP,
                                   cout_j, cin_j, cerate)
                     pe = (perrors[j, etype, Wtype.DROP] *
@@ -178,7 +178,7 @@ def find_drop(pread, cp, perrors, i, etype, cout, cin, ctype, clen, cerate, verb
             continue
 
         if (etype == Etype.SELF
-                or calc_p_diff_pair(j, i, pread) < PTHRES_DIFF):
+                or calc_p_diff_pair(j, i, pread) < PTHRES_DIFF_EO):
             continue
 
         pe_i = calc_p_error(cout, cin, HC_ERATE, etype)
@@ -462,4 +462,58 @@ def find_walls(pread: ProfiledRead,
     pread.e_intvls = e_intvls
     pread.o_intvls = o_intvls
 
+    return
+
+
+def correct_wall_cnt(I, pread):
+    s, t = I.b, I.e
+    n_gain = ([max(pread.counts[i + 1] - pread.counts[i], 0)
+               for i in range(s, min(s + pread.K - 1, t - 1))]
+              + ([-max(pread.counts[i] - pread.counts[i + 1], 0)
+                  for i in range(s,
+                                 s + max([pread.ctx[s + pread.K - 1][ctype.value][Wtype.GAIN.value] * ulen
+                                          for ulen, ctype in enumerate(Ctype, start=1)]))]
+                 if s + pread.K - 1 < t else []))
+    n_drop = ([max(pread.counts[i] - pread.counts[i + 1], 0)
+               for i in range(max(t - pread.K + 1, s), t - 1)]
+              + ([-max(pread.counts[i + 1] - pread.counts[i], 0)
+                  for i in range(t - max([pread.ctx[t - pread.K + 1][ctype.value][Wtype.DROP.value] * ulen
+                                          for ulen, ctype in enumerate(Ctype, start=1)]),
+                                 t - 1)]
+                 if s < t - pread.K + 1 else []))
+    ccb_ctx = pread.counts[s] + max(sum(n_gain), 0)
+    cce_ctx = pread.counts[t - 1] + max(sum(n_drop), 0)
+
+    ccb_naive = max(pread.counts[s:min(s + 2 * pread.K, t)])
+    cce_naive = max(pread.counts[max(t - 2 * pread.K, s):t])
+
+    I.ccb = max(ccb_ctx, ccb_naive)
+    I.cce = max(cce_ctx, cce_naive)
+
+    return
+
+
+def is_reliable(I, pread, cp, verbose=False):
+    if I.e - I.b < pread.K:   # |I| >= K
+        return None
+    if max(I.cb, I.ce) >= cp.depths['R']:   # Not > R-cov
+        return None
+    # Not E-intvl, i.e. Pr{E in S} >= Threshold
+    if I.pe >= PE_THRES[ThresT.FINAL][Etype.SELF]:
+        return None
+    # Smooth *after* count correction, i.e. Skellam(cb-ce,lambda,lambda) >= Threshold where lambda = |I|*D/L
+    correct_wall_cnt(I, pread)
+    p_trans = calc_p_trans(I.b, I.e, I.ccb, I.cce,
+                           (I.ccb + I.cce) // 2, READ_LEN)
+    if p_trans < PTHRES_DIFF_REL:
+        if verbose:
+            print(f"({I.b},{I.e}): p_trans={p_trans} < {PTHRES_DIFF_REL}")
+        return None
+    return I
+
+
+def find_rel_intvls(pread, cp, verbose=False):
+    pread.rel_intvls = list(filter(lambda x: x is not None,
+                                   [is_reliable(I, pread, cp, verbose)
+                                    for I in pread.intvls]))
     return

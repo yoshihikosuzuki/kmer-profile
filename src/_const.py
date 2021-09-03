@@ -2,6 +2,13 @@ from ._type import Etype, ThresT
 
 
 ### ------------------------------ ###
+#    Arguments
+### ------------------------------ ###
+
+READ_LEN = 20000
+
+
+### ------------------------------ ###
 #    Error model parameters
 ### ------------------------------ ###
 
@@ -13,13 +20,14 @@ ERR_PARAMS = ((_MAX_CLEN // 1, lambda n: 0.002 * n * n + 0.002),
 
 
 ### ------------------------------ ###
-#    Error model parameters
+#    Perror thresholds
 ### ------------------------------ ###
 
 PE_THRES = {ThresT.INIT: {Etype.SELF: 0.001, Etype.OTHERS: 0.05},
             ThresT.FINAL: {Etype.SELF: 1e-5, Etype.OTHERS: 1e-5}}
 MAX_N_HC = 5
-PTHRES_DIFF = 1e-20
+PTHRES_DIFF_EO = 1e-20
+PTHRES_DIFF_REL = 1e-4
 
 
 ### ------------------------------ ###

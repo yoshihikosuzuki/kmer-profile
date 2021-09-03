@@ -1,6 +1,6 @@
 from math import sqrt
 from scipy.stats import binom_test, skellam
-from .._type import Etype
+from .. import Etype
 
 
 def plus_sigma(cnt: int,
@@ -34,7 +34,7 @@ def calc_p_trans(b: int,
                  cb: int,
                  ce: int,
                  cov: int,
-                 lread: int = 20000,
+                 lread: int,
                  verbose: bool = False) -> float:
     """Pr{ cb @ b -> ce @ e by sampling fluctuation | mean depth = cov }
     """
