@@ -17,6 +17,7 @@ from bits.util import RelCounter
 import fastk
 from . import ProfiledRead, CountHistVisualizer, ProfiledReadVisualizer, load_pread
 
+
 server = Flask(__name__)
 app = dash.Dash(__name__,
                 external_stylesheets=[
@@ -41,12 +42,12 @@ def build_download_button(fname: str, name: str) -> html.Form:
 @dataclass(repr=False, eq=False)
 class Cache:
     """Cache for data that are needed to be shared over multiple operations."""
-    args: argparse.Namespace = None
-    cdv: Optional[CountHistVisualizer] = None
-    pread: Optional[ProfiledRead] = None
-    prv: Optional[ProfiledReadVisualizer] = None
+    args:   argparse.Namespace = None
+    cdv:    Optional[CountHistVisualizer] = None
+    pread:  Optional[ProfiledRead] = None
+    prv:    Optional[ProfiledReadVisualizer] = None
     tpread: Optional[ProfiledRead] = None
-    tprv: Optional[ProfiledReadVisualizer] = None
+    tprv:   Optional[ProfiledReadVisualizer] = None
 
 
 cache = Cache()
@@ -57,10 +58,10 @@ def reset_axes(fig: go.Figure) -> go.Layout:
     return pl.merge_layout(fig["layout"] if "layout" in fig else None,
                            pl.make_layout(x_range=None, y_range=None))
 
+
 ### ----------------------------------------------------------------------- ###
 ###                        k-mer count distribution                         ###
 ### ----------------------------------------------------------------------- ###
-
 
 @app.callback(
     [Output('fig-dist', 'figure'),
@@ -92,7 +93,7 @@ def update_count_dist(_n_clicks_dist: int,
     if (not ctx.triggered
             or ctx.triggered[0]["prop_id"] == "submit-dist.n_clicks"):
         # Global k-mer count distribution
-        cache.cdv = CountHistVisualizer(relative=True)
+        cache.cdv = CountHistVisualizer(relative=True, show_legend=True)
         cache.cdv.add_trace(fastk.histex(cache.args.fastk_prefix,
                                          max_count=max_count),
                             col="gray",
@@ -107,7 +108,7 @@ def update_count_dist(_n_clicks_dist: int,
         prof = fastk.profex(cache.args.fastk_prefix, read_id)
         return _show_fig(deepcopy(cache.cdv)
                          .add_trace(RelCounter([min(c, max_count) for c in prof]),
-                                    col="turquoise",
+                                    col="deepskyblue",
                                     opacity=0.7,
                                     name=f"Read {read_id}"))
     raise PreventUpdate
@@ -116,7 +117,6 @@ def update_count_dist(_n_clicks_dist: int,
 ### ----------------------------------------------------------------------- ###
 ###                           k-mer count profile                           ###
 ### ----------------------------------------------------------------------- ###
-
 
 @app.callback(
     [Output('fig-profile', 'figure'),
@@ -147,26 +147,27 @@ def update_kmer_profile(_n_clicks_profile: int,
         cache.pread = load_pread(read_id,
                                  cache.args.fastk_prefix,
                                  cache.args.seq_fname)
-        cache.pread.states = (None if cache.args.class_fname is None
-                              else load_fastq(cache.args.class_fname, read_id).qual)
         if cache.pread is None:
             raise PreventUpdate
-
-        cache.prv = (ProfiledReadVisualizer(max_count=max_count)
+        cache.pread.states = (None if cache.args.class_fname is None
+                              else load_fastq(cache.args.class_fname, read_id).qual[cache.pread.K - 1:])
+        cache.prv = (ProfiledReadVisualizer(max_count=max_count, use_webgl=True)
                      .add_pread(cache.pread, show_init_states="SHOW" in class_init))
         new_fig = cache.prv.show(layout=reset_axes(fig),
                                  return_fig=True)
+        pl.show(new_fig, out_html="kmer_prof.html", do_not_display=True)
 
         # True profile
         if cache.args.truth_class_fname is not None:
             cache.tpread = deepcopy(cache.pread)
-            cache.tpread.states = load_fastq(cache.args.truth_class_fname, read_id).qual
-            cache.tprv = (ProfiledReadVisualizer(max_count=max_count)
+            cache.tpread.states = load_fastq(cache.args.truth_class_fname, read_id).qual[cache.pread.K - 1:]
+            cache.tprv = (ProfiledReadVisualizer(max_count=max_count, use_webgl=True)
                           .add_pread(cache.tpread, show_init_states="SHOW" in class_init))
             new_tfig = cache.tprv.show(layout=reset_axes(tfig),
                                        return_fig=True)
+        else:
+            new_tfig = dash.no_update
 
-        pl.show(new_fig, out_html="kmer_prof.html", do_not_display=True)
         return [new_fig,
                 new_tfig,
                 build_download_button("kmer_prof.html", "Download HTML")]
@@ -181,6 +182,9 @@ def update_kmer_profile(_n_clicks_profile: int,
 def main():
     global cache
     parse_args()
+    graph_config = dict(showTips=False,
+                        displaylogo=False,
+                        toImageButtonOptions=dict(format=cache.args.img_format))
     app.layout = html.Div(children=[
         html.Div([html.Button(id='submit-dist',
                               n_clicks=0,
@@ -194,10 +198,11 @@ def main():
                             value='100',
                             type='number')]),
         dcc.Graph(id='fig-dist',
-                  figure=go.Figure(
-                      layout=pl.make_layout(width=800,
-                                            height=400)),
-                  config=dict(toImageButtonOptions=dict(format=cache.args.img_format))),
+                  figure=go.Figure(layout=pl.layout(title="K-mer count histogram",
+                                                    width=800, height=400)),
+                  config=dict(showTips=False,
+                              displaylogo=False,
+                              toImageButtonOptions=dict(format=cache.args.img_format))),
         html.Div(["Read ID: ",
                   dcc.Input(id='read-id',
                             value='',
@@ -219,16 +224,14 @@ def main():
                                           'value': 'SHOW'}],
                                 value=(["SHOW"] if cache.args.class_fname is not None else []))]),
         dcc.Graph(id='fig-profile',
-                  figure=go.Figure(
-                      layout=pl.make_layout(width=1800,
-                                            height=500)),
-                  config=dict(toImageButtonOptions=dict(format=cache.args.img_format))),
-        (dcc.Graph(id='fig-true-profile',
-                  figure=go.Figure(
-                      layout=pl.make_layout(width=1800,
-                                            height=500)),
-                  config=dict(toImageButtonOptions=dict(format=cache.args.img_format)))
-         if cache.args.truth_class_fname is not None else None)
+                  figure=go.Figure(layout=pl.layout(title="Read profile",
+                                                    width=1800, height=500)),
+                  config=graph_config),
+        dcc.Graph(id='fig-true-profile',
+                  figure=go.Figure(layout=pl.layout(title="Ground Truth",
+                                                    width=1800, height=500)),
+                  config=graph_config,
+                  style={"display": "none"} if cache.args.truth_class_fname is None else {})
     ])
     app.run_server(port=int(cache.args.port_number),
                    debug=cache.args.debug_mode)

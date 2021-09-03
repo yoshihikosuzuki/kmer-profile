@@ -110,7 +110,6 @@ class ProfiledReadVisualizer:
                    show_init: bool = False) -> ProfiledReadVisualizer:
         state_pos = defaultdict(list)
         for i, s in enumerate(states):
-            assert s in S_TO_COL, "Invalid state character"
             state_pos[s].append(i)
         return self.add_traces(
             [pl.make_scatter(x=pos_list,

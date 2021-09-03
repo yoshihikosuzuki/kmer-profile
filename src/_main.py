@@ -10,6 +10,7 @@ class ClassParams:
     fastk_prefix: str
     seq_fname:    str
     max_count:    int = 100
+    read_len:     int = 20000
     hist:         RelCounter = field(init=False)
     depths:       Tuple[len(kp.STATES) * (int,)] = field(init=False)
     dthres:       Tuple[(len(kp.STATES) - 1) * (int,)] = field(init=False)
