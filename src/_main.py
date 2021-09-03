@@ -1,17 +1,45 @@
-from . import (Ctype, ErrorModel,
-               load_pread, calc_seq_ctx)
-from ._const import ERR_PARAMS
+from dataclasses import dataclass, field
+from typing import Tuple
+from bits.util import RelCounter
+import fastk
+# from ._type import STATES, Ctype, ErrorModel, CountThres
+# from ._const import ERR_PARAMS
+# from ._core import find_depths_and_thres, calc_cthres, load_pread, calc_seq_ctx, find_walls
+import kmer_profiler as kp
 
 
-def classify_read(read_id: int, fastk_prefix: str, db_fname: str):
+@dataclass
+class ClassParams:
+    fastk_prefix: str
+    seq_fname:    str
+    max_count:    int = 100
+    hist:         RelCounter = field(init=False)
+    depths:       Tuple[len(kp.STATES) * (int,)] = field(init=False)
+    dthres:       Tuple[(len(kp.STATES) - 1) * (int,)] = field(init=False)
+    emodels:      Tuple[len(kp.Ctype) * (kp.ErrorModel,)] = field(init=False)
+    cthres:       kp.CountThres = field(init=False)
+
+    def __post_init__(self) -> None:
+        # Calculating global H/D-depths
+        self.hist = fastk.histex(self.fastk_prefix, max_count=self.max_count)
+        self.depths, self.dthres = kp.find_depths_and_thres(self.hist)
+
+        # Sequence context-dependent error rates
+        self.emodels = [kp.ErrorModel(*kp.ERR_PARAMS[c.value]) for c in kp.Ctype]
+        self.cthres = kp.calc_cthres(self, verbose=False)
+
+
+def classify_read(read_id: int,
+                  cp: ClassParams,
+                  verbose: bool = False):
     # Load the read with count profile
-    pread = load_pread(read_id, fastk_prefix, db_fname)
+    pread = kp.load_pread(read_id, cp.fastk_prefix, cp.seq_fname)
 
     # Compute sequence contexts
-    emodels = [ErrorModel(*ERR_PARAMS[c]) for c in Ctype]
-    pread.ctx = calc_seq_ctx(pread._seq, pread.K, emodels)
+    pread.ctx = kp.calc_seq_ctx(pread._seq, pread.K)
 
     # Compute error probabilities and find walls
+    kp.find_walls(pread, cp, verbose=verbose)
 
     # Find reliable intervals and correct wall counts
 
@@ -19,4 +47,4 @@ def classify_read(read_id: int, fastk_prefix: str, db_fname: str):
 
     # Classify the rest of the k-mers
 
-    return
+    return pread

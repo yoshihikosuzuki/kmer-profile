@@ -135,14 +135,14 @@ class ProfiledReadVisualizer:
                    show_legend: bool = True,
                    show_init: bool = True) -> ProfiledReadVisualizer:
         traces = [
-            pl.make_scatter([x for b, e in intvls for x in [b, e - 1, None]],
+            pl.make_scatter([x for I in intvls for x in [I.b, I.e - 1, None]],
                             [(counts[x] if self.max_count is None
                               else min(self.max_count, counts[x]))
                              if x is not None else None
-                             for b, e in intvls for x in [b, e - 1, None]],
-                            text=[f"intvls[{i}] @{x} ({counts[x]})" if x is not None else None
-                                  for i, (b, e) in enumerate(intvls)
-                                  for x in [b, e - 1, None]],
+                             for I in intvls for x in [I.b, I.e - 1, None]],
+                            text=[f"intvls[{i}] @{x} ({counts[x]}; pe={I.pe:7f})" if x is not None else None
+                                  for i, I in enumerate(intvls)
+                                  for x in [I.b, I.e - 1, None]],
                             mode="markers+lines",
                             col=col,
                             name=name,
@@ -150,10 +150,10 @@ class ProfiledReadVisualizer:
                             show_init=show_init)]
         if states is not None:
             traces.append(
-                pl.make_scatter([x for b, e in intvls for x in [b, e - 1]],
+                pl.make_scatter([x for I in intvls for x in [I.b, I.e - 1]],
                                 [(counts[x] if self.max_count is None
                                   else min(self.max_count, counts[x]))
-                                 for b, e in intvls for x in [b, e - 1]],
+                                 for I in intvls for x in [I.b, I.e - 1]],
                                 col=[S_TO_COL[s] for s in states for _ in range(2)]))
         return self.add_traces(traces)
 
