@@ -2,6 +2,29 @@ from typing import List, Optional
 from logzero import logger
 from bits.seq import FastqRecord
 import fastk
+from .. import ProfiledRead
+
+
+def calc_acc_pread(pread: ProfiledRead,
+                   tread: ProfiledRead,
+                   r_thres: int = 100,
+                   verbose: bool = True):
+    """For evaluation of a single read profile.
+    """
+    assert pread.name == tread.name
+    assert pread.length == tread.length
+    L = pread.length
+
+    n_rep = sum([c >= r_thres for c in pread.counts])
+    p_rep = n_rep / L * 100
+
+    n_diff = sum([s != t for s, t in zip(pread.states, tread.states)])
+    p_diff = n_diff / L * 100
+
+    if verbose:
+        print(f"Read {pread.id:6}: {p_diff:5.1f} % ({n_diff:5} / {L:5}) [{p_rep:5.1f} %repeat]")
+
+    return (L, n_diff, p_diff, n_rep, p_rep)
 
 
 def calc_acc(est_class: List[FastqRecord],

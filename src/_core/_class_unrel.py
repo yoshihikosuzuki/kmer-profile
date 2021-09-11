@@ -1,319 +1,300 @@
-import numpy as np
-from scipy.stats import binom, poisson, skellam
-from logzero import logger
-from .. import STATES
-from ._class_rel import nn_intvl, estimate_true_counts, estimate_true_counts_intvl, logp_e
+from dataclasses import dataclass
+from typing import Optional, NamedTuple, Tuple
+from math import inf, log
+from scipy.stats import poisson, binom
+from .. import Etype, STATES, StateT, Intvl, ProfiledRead, E_PO_BASE, R_LOGP
+from .._plot import color_asgn
+from .._main import ClassParams
+from ._util import minus_sigma, linear_interplation, calc_logp_trans, calc_p_error
 
 
-def logp_r_short(i, intvls, asgn, profile, DEPTHS, verbose, n_sigma=1):
-    if verbose:
-        print("### REPEAT ###")
-    ib, ie = intvls[i]
-    if max(profile[ib], profile[ie - 1]) >= DEPTHS['R']:
-        return 0.
-    #pc, nc = estimate_true_counts_intvl(i, 'D', 'b', intvls, asgn, profile)
-    pc, nc = estimate_true_counts(i, 'D', 'b', intvls, asgn, profile)
-    #p, n = nn_intvl(i, 'D', 'b', asgn)
-    #pc, nc = profile[intvls[p][1] - 1] if p >= 0 else -1, profile[intvls[n][0]] if n <len(intvls) else -1
-    if pc == -1 and nc == -1:
-        #pc, nc = estimate_true_counts_intvl(i, 'H', 'b', intvls, asgn, profile)
-        pc, nc = estimate_true_counts(i, 'H', 'b', intvls, asgn, profile)
-        #p, n = nn_intvl(i, 'H', 'b', asgn)
-        #pc, nc = profile[intvls[p][1] - 1] if p >= 0 else -1, profile[intvls[n][0]] if n <len(intvls) else -1
-        if pc == -1 and nc == -1:
-            pc, nc = DEPTHS['D'], DEPTHS['D']
-        elif pc == -1:
-            pc = nc
-        elif nc == -1:
-            nc = pc
-    elif pc == -1:
-        pc = nc
-    elif nc == -1:
-        nc = pc
-    dr_ratio = 1 + n_sigma * (1 / np.sqrt(DEPTHS['D']))   # X-sigma interval
-    pc, nc = pc * dr_ratio, nc * dr_ratio
-    if verbose:
-        print(f"[LEFT] R_est={pc}, {profile[ib]} ~ [RIGHT] R_est={nc}, {profile[ie - 1]}")
-    if profile[ib] >= pc or profile[ie - 1] >= nc:
-        return 0.
-    else:
-        return binom.logpmf(profile[ib], pc, 1 - 0.01) + binom.logpmf(profile[ie - 1], nc, 1 - 0.01)
-    
+def classify_unrel(pread, cp, verbose, verbose_prob=False):
+    _ = ClassUnrel(pread, cp, verbose=verbose, verbose_prob=verbose_prob)
 
-def logp_hd_short2(state, i, intvls, asgn, profile, pread, DEPTHS, verbose, lread=20000):
-    ib, ie = intvls[i]
-    p, n = nn_intvl(i, state, 'b', asgn)
-    if p < 0:
-        if verbose:
-            print(f"[no prev {state} intvl]")
-    else:
-        pb, pe = intvls[p]
-        sf_lambda = DEPTHS[state] * (ib - (pe - 1)) / lread
-        logp_sf = skellam.logpmf(profile[ib] - profile[pe - 1],
-                                 sf_lambda, sf_lambda)
-        if pe == ib:
-            logp_er = np.log(min(pread.pe["others"]["drop"][ib], pread.pe["others"]["gain"][ib]))
+
+def _log(x): return -inf if x == 0. else log(x)
+def is_updated(I): return not (I.is_rel and I.asgn in ('H', 'D'))
+
+
+class PosCnt(NamedTuple):
+    """Positional k-mer count (or estimated coverage)."""
+    pos: int
+    cnt: int
+
+
+@dataclass(repr=False)
+class ClassUnrel:
+    pread:        ProfiledRead
+    cp:           ClassParams
+    n_sigma:      int = 1           # TODO: stop using n_sigma
+    verbose:      bool = False
+    verbose_prob: bool = False
+
+    def __post_init__(self):
+        self.run()
+
+    def run(self):
+        pread = self.pread
+
+        # Find best class for each interval (except reliable H/D-intervals)
+        # from larger count to smaller, and then smaller to larger.
+        _ascend = [x[0] for x in
+                   sorted([(idx, min(I.cb, I.ce))
+                           for idx, I in enumerate(pread.intvls)
+                           if is_updated(I)],
+                          key=lambda x: x[1])]
+        _descend = reversed(_ascend)
+        for idx in _descend:              # TODO: more robust order?
+            self._update(idx)
+        for idx in _ascend:
+            self._update(idx)
+
+        # Convert interval classifications into k-mer classifications
+        assert all([I.asgn in STATES for I in pread.intvls]), \
+            "Unclassified intervals"
+        pread.states = ['-'] * pread.length
+        for I in pread.intvls:
+            for i in range(I.b, I.e):
+                assert pread.states[i] == '-', "Conflict"
+                pread.states[i] = I.asgn
+        assert all([s in STATES for s in pread.states]), \
+            "Unclassified k-mers"
+
+        # Extend short E-intvls and resolve slippage of low-complexity bases
+#         self.extend_e()
+#         self.resolve_slip()
+
+        pread.states = ''.join(pread.states)
+
+    def _update(self, i: int) -> None:
+        if self.verbose:
+            self._print_intvl(i)
+
+        I = self.pread.intvls[i]
+        max_s, max_logp = None, -inf
+        for s in 'REHD':
+            logp = self.calc_logp(s, i)
+            if max_logp < logp:
+                max_s, max_logp = s, logp
+            if max_logp == 0.:   # >= R-cov
+                break
+        if self.verbose and I.asgn != max_s:
+            print(f"Updated: {color_asgn(I.asgn)} -> {color_asgn(max_s)}")
+        I.asgn = max_s
+
+    def _find_nn(self, i: int, s: StateT, only_rel: bool) -> Tuple[Optional[int], Optional[int]]:
+        """For each direction, find index of interval with state `s`
+        nearest from `intvls[i]`. If not found, return None.
+        """
+        def _is_target(I: Intvl):
+            return I.asgn == s and (I.is_rel if only_rel else True)
+
+        intvls = self.pread.intvls
+        l = i - 1
+        while l >= 0 and not _is_target(intvls[l]):
+            l -= 1
+        if l < 0:
+            l = None
+        r = i + 1
+        while r < len(intvls) and not _is_target(intvls[r]):
+            r += 1
+        if r >= len(intvls):
+            r = None
+        if self.verbose_prob:
+            print(f"(NN {s}=({l},{r})) ", end='')
+        return (l, r)
+
+    def _est_cov(self,
+                 i: int,
+                 x: int,
+                 s: StateT,
+                 from_est: bool = False) -> int:
+        """Estimate the true count of the class `s` at position `x` of the `i`-th interval
+        using reliable intervals.
+        NOTE: `x` == `intvls[i].b` or `intvls[i].e - 1`
+
+        [Case 1] Use a simple linear interpolation given reliable intervals
+                 of the same class at both sides:
+                          L.e - 1
+                   L o-----o
+                                  I o-----o     R.b
+                 (I.b or I.e - 1 =) x            o-----o R
+
+        [Case 2] Use a "zig-zag" interploation given a H-D coverage ratio estimated from
+                 reliable intervals of both Haplo and Diplo:
+                                                                       x
+                   D2 o-----o        D1  o-----o                       o-----o I(Diplo)
+                                                      ...
+                            H o-----o                        o-----o L(Haplo)
+                 (estimate H-D ratio from D2, H, D1)
+        """
+        assert s in ('H', 'D')
+        intvls = self.pread.intvls
+        l, r = self._find_nn(i, s, only_rel=True)
+        if l is not None and r is not None:
+            L, R = intvls[l], intvls[r]
+            return linear_interplation(x, (L.e - 1, L.cce), (R.b, R.ccb))
+        elif l is not None:
+            L = intvls[l]
+            return L.cce   # TODO: better estimation using H intervals and H-D ratio
+        elif r is not None:
+            R = intvls[r]
+            return R.ccb
         else:
-            logp_er = -np.inf
-        logp_l = max(logp_sf, logp_er)
-        if verbose:
-            print(
-                f"[B {'DROP' if profile[pe - 1] >= profile[ib] else 'GAIN'}] {profile[pe - 1]} @ {pe - 1} -> {profile[ib]} @ {ib}")
-            print(
-                f"  logp(SF)={logp_sf} {'***' if logp_sf >= logp_er else ''}")
-            print(
-                f"  logp(ER)={logp_er} {'***' if logp_er >= logp_sf else ''}")
-    if n >= len(asgn):
-        if verbose:
-            print(f"[no next {state} intvl]")
-    else:
-        nb, ne = intvls[n]
-        sf_lambda = DEPTHS[state] * (nb - (ie - 1)) / lread
-        logp_sf = skellam.logpmf(profile[nb] - profile[ie - 1],
-                                 sf_lambda, sf_lambda)
-        if ie == nb:
-            logp_er = np.log(min(pread.pe["others"]["drop"][ie], pread.pe["others"]["gain"][ie]))
+            # No D-reliable intervals. Use H-reliable intervals if exist
+            if from_est:   # Came from H-estimation, meaning no H and D reliable intervals
+                return None
+            cov = self._est_cov(i, x, 'D' if s == 'H' else 'H', from_est=True)
+            if cov is not None:
+                return cov // 2 if s == 'H' else cov * 2
+            else:   # No H and D reliable intervals
+                return self.cp.depths[s]
+
+    def calc_logp(self, s: StateT, i: int) -> float:
+        assert s in STATES, f"Invalid state: {s}"
+        return (self.logp_e if s == 'E'
+                else self.logp_h if s == 'H'
+                else self.logp_d if s == 'D'
+                else self.logp_r)(i)
+
+    def logp_e(self, i: int) -> float:
+        if self.verbose_prob:
+            print(f"[{color_asgn('E')}] ", end='')
+        I = self.pread.intvls[i]
+        logp_er = _log(I.pe)
+        logp_po = sum([poisson.logpmf(c, self.cp.depths['E'])
+                       for c in (I.cb, I.ce)]) + E_PO_BASE
+        logp = max(logp_er, logp_po)
+        if self.verbose_prob:
+            print(f"ER={logp_er:5.0f}{'*' if logp_er >= logp_po else ' '} "
+                  f"PO={logp_po:5.0f}{'*' if logp_po >= logp_er else ' '}")
+        return logp
+
+    def logp_r(self, i: int) -> float:
+        if self.verbose_prob:
+            print(f"[{color_asgn('R')}] ", end='')
+        intvls = self.pread.intvls
+        I = intvls[i]
+        if max(I.cb, I.ce) >= self.cp.depths['R']:
+            if self.verbose_prob:
+                print(f"> Global R-cov")
+            return 0.
+        # est_cnt = self._est_cov(i, I.b, s)
+        l, r = self._find_nn(i, 'D', only_rel=True)   # FIXME: reconsider coverage estimation
+        if l is None and r is None:
+            dcov_l = dcov_r = self.cp.depths['D']
+        elif l is None:
+            dcov_l = dcov_r = intvls[r].cb
+        elif r is None:
+            dcov_l = dcov_r = intvls[l].ce
         else:
-            logp_er = -np.inf
-        logp_r = max(logp_sf, logp_er)
-        if verbose:
-            print(
-                f"[E {'DROP' if profile[ie - 1] >= profile[nb] else 'GAIN'}] {profile[ie - 1]} @ {ie - 1} -> {profile[nb]} @ {nb}")
-            print(
-                f"  logp(SF)={logp_sf} {'***' if logp_sf >= logp_er else ''}")
-            print(
-                f"  logp(ER)={logp_er} {'***' if logp_er >= logp_sf else ''}")
-    if p < 0 and n >= len(asgn):
-        if verbose:
-            print(
-                f"[ISOLATED] {profile[ib]} @ {ib} -- {profile[ie - 1]} @ {ie - 1}")
-        if ie - ib >= 100:
-            logp_l = poisson.logpmf(profile[ib], DEPTHS[state])
-            logp_r = poisson.logpmf(profile[ie - 1], DEPTHS[state])
-            if verbose:
-                print(f"  logp(L POISSON)={logp_l}")
-                print(f"  logp(R POISSON)={logp_r}")
-        else:
-            if verbose:
-                print("  too short")
-            return -np.inf
-    elif p < 0:
-        logp_l = logp_r
-    elif n >= len(asgn):
-        logp_r = logp_l
-    #return logp_l + logp_r
-    #return min(logp_l, logp_r)
-    return max(logp_l, logp_r)
+            dcov_l, dcov_r = intvls[l].ce, intvls[r].cb
+        rcov_l, rcov_r = int(dcov_l * self.cp.DR_RATIO), int(dcov_r * self.cp.DR_RATIO)
+        if I.cb >= rcov_l or I.ce >= rcov_r:
+            if self.verbose_prob:
+                print(f"> Est R-cov (B: {I.cb} >= {rcov_l} or E: {I.ce} >= {rcov_r})")   # FIXME: "slipping interval" in repeats
+            return R_LOGP
+        logp_l = binom.logpmf(I.cb, rcov_l, 1 - 0.01)   # TODO: use smaller n-sigma and use calc_logp
+        logp_r = binom.logpmf(I.ce, rcov_r, 1 - 0.01)
+        logp = logp_l + logp_r
+        if self.verbose_prob:
+            print(f"ER={logp_l:5.0f} + {logp_r:5.0f} -> logp={logp:5.0f}")
+        return logp
 
+    def logp_hd(self, s: StateT, i: int) -> float:
+        cp = self.cp
+        intvls = self.pread.intvls
+        I = intvls[i]
+        l_rel, r_rel = self._find_nn(i, s, only_rel=True)
 
-def logp_h_short(i, intvls, asgn, profile, pread, DEPTHS, verbose, lread=20000, n_sigma=2):
-    if verbose:
-        print("### HAPLO ###")
-    # H < D
-    ib, ie = intvls[i]
-    p, n = nn_intvl(i, 'D', 'b', asgn)
-    if p >= 0 and n < len(asgn):
-        pb, pe = intvls[p]
-        nb, ne = intvls[n]
-        #if profile[pe - 1] < profile[ib] and profile[nb] < profile[ie - 1]:
-        #    return -np.inf
+        # TODO: Fast return when it is almost impossible transition
+        # TODO: memoization of probabilities (given dependencies)
 
-    pc, nc = estimate_true_counts_intvl(i, 'D', 'b', intvls, asgn, profile)
-    if pc == -1 and nc == -1:
-        pc, nc = DEPTHS['D'], DEPTHS['D']
-    elif pc == -1:
-        pc = nc
-    elif nc == -1:
-        nc = pc
-    pc, nc = pc / 1.25, nc / 1.25
-    if verbose:
-        print(
-            f"[LEFT] H_est={pc}, {profile[ib]} ~ [RIGHT] H_est={nc}, {profile[ie - 1]}")
-    if profile[ib] > pc and profile[ie - 1] > nc:
-        return -np.inf
-    
-    p, n = nn_intvl(i, 'H', 'b', asgn)
-    pc, nc = profile[intvls[p][1] - 1] if p >= 0 else - \
-        1, profile[intvls[n][0]] if n < len(intvls) else -1
-    if pc == -1 and nc == -1:
-        pc, nc = DEPTHS['H'], DEPTHS['H']
-    elif pc == -1:
-        pc = nc
-    elif nc == -1:
-        nc = pc
-    hd_ratio = 1 + n_sigma * (1 / np.sqrt(DEPTHS['H']))   # X-sigma interval
-    pc, nc = pc * hd_ratio, nc * hd_ratio
-    if verbose:
-        print(
-            f"[LEFT] RH_est={pc}, {profile[ib]} ~ [RIGHT] RH_est={nc}, {profile[ie - 1]}")
-    if profile[ib] >= pc or profile[ie - 1] >= nc:
-        return -np.inf
+        ### --------------------------- LEFT TRANSITION ---------------------------------- ###
+        logp_l_er = logp_l_sf = logp_l_sf_er = -inf
+        # Case 1. Errors in others from adjacent interval with the same class
+        l = i - 1
+        if l >= 0 and intvls[l].asgn == s:
+            logp_l_er = _log(I.pe_o.b)
+        # Case 2. Sampling fluctuation from nearest neighbor reliable interval
+        if l_rel is not None:
+            L = intvls[l_rel]
+            logp_l_sf = calc_logp_trans(L.e - 1, I.b, L.cce, I.cb,
+                                        L.cce, cp.read_len)
+        # Case 3. Estimated true count at I.b and errors in others
+        est_cnt = self._est_cov(i, I.b, s)
+        # TODO: calculate max error probability using contexts within [I.b - K + 1..I.b]
+        max_erate = 0.1   # TODO: use contexts
+        if est_cnt >= I.cb:
+            logp_l_sf_er = _log(calc_p_error(est_cnt, I.cb, max_erate, Etype.OTHERS))
+        logp_l = max(logp_l_er, logp_l_sf, logp_l_sf_er)
+        if self.verbose_prob:
+            print(f"[L] SF={logp_l_sf:5.0f} "
+                  f"ER={logp_l_er:5.0f} "
+                  f"SF-ER={logp_l_sf_er:5.0f} (logp_l={logp_l:5.0f})", end='')
 
-    return logp_hd_short2('H', i, intvls, asgn, profile, pread, DEPTHS, verbose, lread)
+        ### --------------------------- RIGHT TRANSITION ---------------------------------- ###
+        logp_r_er = logp_r_sf = logp_r_sf_er = -inf
+        # Case 1. Errors in others from adjacent interval with the same class
+        r = i + 1
+        if r < len(intvls) and intvls[r].asgn == s:
+            logp_r_er = _log(I.pe_o.e)
+        # Case 2. Sampling fluctuation from nearest neighbor reliable interval
+        if r_rel is not None:
+            R = intvls[r_rel]
+            logp_r_sf = calc_logp_trans(I.e - 1, R.b, I.ce, R.ccb,
+                                        R.ccb, cp.read_len)
+        # Case 3. Estimated true count at I.b and errors in others
+        est_cnt = self._est_cov(i, I.e - 1, s)
+        # TODO: calculate max error probability using contexts within [I.b - K + 1..I.b]
+        max_erate = 0.1
+        if est_cnt >= I.ce:
+            logp_r_sf_er = _log(calc_p_error(est_cnt, I.ce, max_erate, Etype.OTHERS))
+        logp_r = max(logp_r_er, logp_r_sf, logp_r_sf_er)
+        if self.verbose_prob:
+            print(f"[R] SF={logp_r_sf:5.0f} "
+                  f"ER={logp_r_er:5.0f} "
+                  f"SF-ER={logp_r_sf_er:5.0f} (logp_r={logp_r:5.0f})", end='')
 
+        if logp_l == -inf and logp_r == -inf:
+            logp_l = poisson.logpmf(I.cb, self.cp.depths[s])
+            logp_r = poisson.logpmf(I.ce, self.cp.depths[s])
+            if self.verbose_prob:
+                print(f"No other {s}-intvl. PO={logp_l:5.0f} + {logp_r:5.0f} ", end='')
+        elif logp_l == -inf:
+            logp_l = logp_r
+        elif logp_r == -inf:
+            logp_r = logp_l
+        logp = logp_l + logp_r
+        if self.verbose_prob:
+            print(f"-> logp={logp:5.0f}")
+        return logp
 
-def logp_d_short(i, intvls, asgn, profile, pread, DEPTHS, verbose, lread=20000):
-    if verbose:
-        print("### DIPLO ###")
-    # H < D
-    ib, ie = intvls[i]
-    p, n = nn_intvl(i, 'H', 'b', asgn)
-    if p >= 0 and n < len(asgn):
-        pb, pe = intvls[p]
-        nb, ne = intvls[n]
-        #if profile[pe - 1] > profile[ib] and profile[nb] > profile[ie - 1]:
-        #    return -np.inf
+    def logp_h(self, i: int) -> float:
+        if self.verbose_prob:
+            print(f"[{color_asgn('H')}] ", end='')
+        # intvls = self.pread.intvls
+        # I = intvls[i]
+        # l, r = self._find_nn(i, 'D', only_rel=True)
+        # if l is not None:
+        #     dcov_l = intvls[l].ce
+        #     if minus_sigma(dcov_l, self.n_sigma) <= I.cb:
+        #         if self.verbose_prob:
+        #             print(f"[B] > D - {self.n_sigma} sigma")
+        #         return -inf
+        # if r is not None:
+        #     dcov_r = intvls[r].cb
+        #     if minus_sigma(dcov_r, self.n_sigma) <= I.ce:
+        #         if self.verbose_prob:
+        #             print(f"[E] > D - {self.n_sigma} sigma")
+        #         return -inf
+        return self.logp_hd('H', i)
 
-    pc, nc = estimate_true_counts_intvl(i, 'H', 'b', intvls, asgn, profile)
-    if pc == -1 and nc == -1:
-        pc, nc = DEPTHS['H'], DEPTHS['H']
-    elif pc == -1:
-        pc = nc
-    elif nc == -1:
-        nc = pc
-    pc, nc = pc * 1.25, nc * 1.25
-    if verbose:
-        print(
-            f"[LEFT] H_est={pc}, {profile[ib]} ~ [RIGHT] H_est={nc}, {profile[ie - 1]}")
-    if profile[ib] < pc and profile[ie - 1] < nc:
-        return -np.inf
-    return logp_hd_short2('D', i, intvls, asgn, profile, pread, DEPTHS, verbose, lread)
+    def logp_d(self, i: int) -> float:
+        if self.verbose_prob:
+            print(f"[{color_asgn('D')}] ", end='')
+        return self.logp_hd('D', i)
 
-
-def update_state_short(i, intvls, asgn, profile, pread, DEPTHS, verbose):
-    if not isinstance(asgn, list):
-        asgn = list(asgn)
-    max_logp = -np.inf
-    max_s = None
-    for s in STATES:
-        logp = (logp_e(i, intvls, asgn, profile, pread, DEPTHS, verbose) if s == 'E'
-                else logp_r_short(i, intvls, asgn, profile, DEPTHS, verbose) if s == 'R'
-                else logp_h_short(i, intvls, asgn, profile, pread, DEPTHS, verbose) if s == 'H'
-                else logp_d_short(i, intvls, asgn, profile, pread, DEPTHS, verbose))
-        if verbose:
-            print(f"intvl {intvls[i]}: logp state {s} = {logp}")
-        if logp > max_logp:
-            max_logp = logp
-            max_s = s
-    if max_s != asgn[i]:
-        if verbose:
-            print(f"State updated @{i}: {asgn[i]} -> {max_s}")
-    return max_s
-
-
-def check_sparsity(states, wlen=1000, thres_p=0.1):
-    # print(states)
-    for i in range(-(-len(states) // wlen)):
-        s, t = i * wlen, (i + 1) * wlen
-        p_normal = len(
-            list(filter(lambda state: state in ('H', 'D'), states[s:t]))) / wlen
-        if p_normal < thres_p:
-            print(f"[{s},{t}): {p_normal}")
-            for j in range(s, min(t, len(states))):
-                # print(j)
-                states[j] = 'E' if states[j] == 'E' else 'R'
-    # print(states)
-    return states
-
-
-def get_states(long_merged_smooth_intvls, asgn, profile, merged_intvls, pread, DEPTHS, th_p_normal=0.1, verbose=False):
-    lmsi_to_asgn = dict(zip(long_merged_smooth_intvls, asgn))
-    #asgn_merged = [lmsi_to_asgn[intvl]
-    #               if intvl in lmsi_to_asgn and lmsi_to_asgn[intvl] != 'E' else '-' for intvl in merged_intvls]
-    asgn_merged = [lmsi_to_asgn[intvl]
-                   if intvl in lmsi_to_asgn else '-' for intvl in merged_intvls]
-    i_updates = set([i for i, state in enumerate(asgn_merged) if state == '-'])
-
-    # TEMP: check entire sparsity
-    states = ['E'] * len(profile)
-    for (s, t), state in zip(long_merged_smooth_intvls, asgn):
-        for i in range(s, t):
-            states[i] = state
-    p_normal = len(
-        list(filter(lambda state: state in ('H', 'D'), states))) / len(states)
-
-    logger.info(f"%Normal={p_normal * 100}")
-    if p_normal < th_p_normal:
-        logger.info("Too repetitive. Do not classify unreliable intervals")
-
-    for i, s, t, c, state in sorted([(j, merged_intvls[j][0], merged_intvls[j][1],
-                               min(pread.counts[merged_intvls[j][0]], pread.counts[merged_intvls[j][1] - 1]),
-                               state)
-                              for j, state in enumerate(asgn_merged)], key=lambda x: x[3], reverse=True):
-        # for i, state in enumerate(asgn_merged):
-        if verbose:
-            print(f"\n### {s, t, c}")
-        #if state == '-':
-        if i in i_updates:
-            if p_normal >= th_p_normal:
-                asgn_merged[i] = update_state_short(
-                    i, merged_intvls, asgn_merged, profile, pread, DEPTHS, verbose)
-            else:
-                asgn_merged[i] = 'R'
-    for i, s, t, c, state in sorted([(j, merged_intvls[j][0], merged_intvls[j][1],
-                               min(pread.counts[merged_intvls[j][0]], pread.counts[merged_intvls[j][1] - 1]),
-                               state)
-                              for j, state in enumerate(asgn_merged)], key=lambda x: x[3], reverse=False):
-        # for i, state in enumerate(asgn_merged):
-        if verbose:
-            print(f"\n### {s, t, c}")
-        #if state == '-':
-        if i in i_updates:
-            if p_normal >= th_p_normal:
-                asgn_merged[i] = update_state_short(
-                    i, merged_intvls, asgn_merged, profile, pread, DEPTHS, verbose)
-            else:
-                asgn_merged[i] = 'R'
-    states = ['E'] * len(profile)
-    for (s, t), state in zip(merged_intvls, asgn_merged):
-        for i in range(s, t):
-            states[i] = state
-    return states
-
-
-def remove_slips(pread) -> None:
-    def _updown(i):
-        if pread.counts[i] == pread.counts[i - 1]:
-            return 1
-        else:
-            return (pread.counts[i] - pread.counts[i - 1]) // abs(pread.counts[i] - pread.counts[i - 1])
-
-    slip_intvls = []
-    prev_s = None
-    base = None
-    updown = None
-    hp = False
-    start = -1
-    for i, s in enumerate(pread.states):
-        if s != prev_s:
-            if hp:
-                if _updown(i) == updown:
-                    left_s, right_s = pread.states[start - 1], pread.states[i]
-                    #print(start, i, left_s, right_s)
-                    mod_s = ('E' if 'E' in (left_s, right_s)
-                             else prev_s)
-                    slip_intvls.append((start, i, mod_s))
-            hp = True
-            start = i
-            prev_s = s
-            updown = _updown(i)
-            if updown == -1:
-                base = pread.seq[i]
-            else:
-                base = pread.seq[i - pread.K + 1]
-        if pread.counts[i] == pread.counts[i - 1]:
-            hp = False
-        if _updown(i) != updown:
-            hp = False
-        else:
-            if updown == -1:
-                if base != pread.seq[i]:
-                    hp = False
-            else:
-                if base != pread.seq[i - pread.K + 1]:
-                    hp = False
-
-    logger.debug(f"Slip intvls = {slip_intvls}")
-    for i, j, s in slip_intvls:
-        for k in range(i, j):
-            pread.states[k] = s
+    def _print_intvl(self, i: int) -> None:
+        I = self.pread.intvls[i]
+        print(f"# I[{i}] = ({I.b}, {I.e}): {I.cb} ~~ {I.ce} (asgn={color_asgn(I.asgn)})")

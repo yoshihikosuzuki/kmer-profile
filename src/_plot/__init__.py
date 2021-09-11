@@ -1,4 +1,3 @@
-from ._color import S_TO_COL, S_TO_COL_PRINT
+from ._color import S_TO_COL, S_TO_COL_PRINT, color_asgn
 from ._hist import CountHistVisualizer
-from ._profile import ProfiledReadVisualizer
-from ._context import trace_depth, trace_minus, trace_ctx, trace_wall, trace_intvl
+from ._profile import PreadVisualizer

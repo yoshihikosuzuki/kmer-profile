@@ -37,6 +37,7 @@ class State(Enum):
 
 STATES = 'EHDR'
 
+StateT = str
 CtxLenT = int
 CinT, CoutT = int, int
 
@@ -100,7 +101,12 @@ SeqCtx = List[Tuple[len(Ctype) * (Tuple[List[int], List[int]],)]]
 #    Interval
 ### ------------------------------ ###
 
+class PerrorInO(NamedTuple):
+    b: float
+    e: float
+
 class ErrorIntvl(NamedTuple):
+    """Simple, immutable interval object for wall pairing."""
     b:  int
     e:  int
     pe: float
@@ -108,16 +114,17 @@ class ErrorIntvl(NamedTuple):
 
 @dataclass
 class Intvl:
+    """Full, mutable interval object for classification targets."""
     b:      int
     e:      int
-    pe:     Tuple[len(Etype) * (float,)]
+    pe:     float = 0.   # TODO: logpe? E in O?
+    pe_o:   PerrorInO = PerrorInO(b=0., e=0.)
     asgn:   str = '-'
-    cb:     int = None
-    ce:     int = None
-    ccb:    int = None
-    cce:    int = None
+    cb:     Optional[int] = None
+    ce:     Optional[int] = None
+    ccb:    Optional[int] = None
+    cce:    Optional[int] = None
     is_rel: bool = False
-    is_err: bool = False
 
 
 ### ------------------------------ ###

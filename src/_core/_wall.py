@@ -1,7 +1,7 @@
 from typing import Dict
-import numpy as np
+from math import inf
 from logzero import logger
-from .. import (Etype, Ctype, Wtype, ThresT, ErrorIntvl, Intvl, ProfiledRead,
+from .. import (Etype, Ctype, Wtype, ThresT, PerrorInO, ErrorIntvl, Intvl, ProfiledRead,
                 PE_THRES, PTHRES_DIFF_EO, PTHRES_DIFF_REL, MAX_N_HC)
 from .._main import ClassParams
 from ._util import calc_p_error, calc_p_trans
@@ -60,7 +60,7 @@ def find_gain(pread, cp, perrors, i, etype, cout, cin, ctype, clen, cerate, verb
     cthres = cp.cthres[ThresT.FINAL]
     HC_ERATE = cp.emodels[Ctype.HP.value].pe(1)
 
-    max_j, max_pe = None, -np.inf
+    max_j, max_pe = None, -inf
     ipk = i + pread.K - 1
 
     # Low-complexity error
@@ -71,22 +71,24 @@ def find_gain(pread, cp, perrors, i, etype, cout, cin, ctype, clen, cerate, verb
     while pread.seq[i + n:i + n + ulen] == useq:
         n += ulen
     j = ipk + n - m
+    if j <= i:   # Too long (>= K bp) low-complexity sequences
+        return None
     if j >= pread.length:
         j = pread.length
-        pe = perrors[i, etype, Wtype.DROP] ** 2
+        pe = perrors[i, etype, Wtype.DROP] ** 2   # TODO: なぜここで boundary E-intvl が弾けていないのか
         cout_j, cin_j = "*", "*"
     else:
         cin_j, cout_j = pread.counts[j - 1:j + 1]
-        pe = -np.inf
+        pe = -inf
         if cin_j <= cout_j:
             ct_key_j = (ctype, clen, cout_j, etype)
             if not (ct_key_j in cthres and cthres_ng(cin_j, cthres, ct_key_j, etype)):
                 if (etype == Etype.SELF
                         or calc_p_diff_pair(i, j, pread, cp) >= PTHRES_DIFF_EO):
                     update_perror(perrors, j, etype, Wtype.GAIN,
-                                  cout_j, cin_j, cerate)
+                                cout_j, cin_j, cerate)
                     pe = (perrors[i, etype, Wtype.DROP] *
-                          perrors[j, etype, Wtype.GAIN])
+                        perrors[j, etype, Wtype.GAIN])
     if max_pe < pe:
         max_j, max_pe = j, pe
     if verbose:
@@ -98,7 +100,10 @@ def find_gain(pread, cp, perrors, i, etype, cout, cin, ctype, clen, cerate, verb
         j = ipk + n - m
         if j >= pread.length:
             continue
-        cin_j, cout_j = pread.counts[j - 1:j + 1]
+        data = pread.counts[j - 1:j + 1]
+        if len(data) != 2:
+            continue
+        cin_j, cout_j = data
 
         if not (cin_j <= cout_j):
             continue
@@ -128,7 +133,7 @@ def find_drop(pread, cp, perrors, i, etype, cout, cin, ctype, clen, cerate, verb
     cthres = cp.cthres[ThresT.FINAL]
     HC_ERATE = cp.emodels[Ctype.HP.value].pe(1)
 
-    max_j, max_pe = None, -np.inf
+    max_j, max_pe = None, -inf
     imk = i - pread.K + 1
 
     # Low-complexity error
@@ -139,22 +144,24 @@ def find_drop(pread, cp, perrors, i, etype, cout, cin, ctype, clen, cerate, verb
     while pread.seq[imk - n - ulen:imk - n] == useq:
         n += ulen
     j = imk - n + m
-    if j < 0:
+    if j >= i:   # Too long (>= K bp) low-complexity sequences
+        return None
+    if j <= 0:
         j = 0
         pe = perrors[i, etype, Wtype.GAIN] ** 2
         cout_j, cin_j = "*", "*"
     else:
         cout_j, cin_j = pread.counts[j - 1:j + 1]
-        pe = -np.inf
+        pe = -inf
         if cin_j <= cout_j:
             ct_key_j = (ctype, clen, cout_j, etype)
             if not (ct_key_j in cthres and cthres_ng(cin_j, cthres, ct_key_j, etype)):
                 if (etype == Etype.SELF
                         or calc_p_diff_pair(j, i, pread, cp) >= PTHRES_DIFF_EO):
                     update_perror(perrors, j, etype, Wtype.DROP,
-                                  cout_j, cin_j, cerate)
+                                cout_j, cin_j, cerate)
                     pe = (perrors[j, etype, Wtype.DROP] *
-                          perrors[i, etype, Wtype.GAIN])
+                        perrors[i, etype, Wtype.GAIN])
     if max_pe < pe:
         max_j, max_pe = j, pe
     if verbose:
@@ -164,9 +171,12 @@ def find_drop(pread, cp, perrors, i, etype, cout, cin, ctype, clen, cerate, verb
     m = 0
     for n in range(MAX_N_HC + 1):
         j = imk - n + m
-        if j < 0:
+        if j <= 0:
             continue
-        cout_j, cin_j = pread.counts[j - 1:j + 1]
+        data = pread.counts[j - 1:j + 1]
+        if len(data) != 2:
+            continue
+        cout_j, cin_j = data
 
         # Impossible cases
         if not (cin_j <= cout_j):
@@ -200,9 +210,13 @@ def update_perror(perrors, i, etype, wtype, cout, cin, pe):
 
 
 def find_pair(pread, cp, perrors, i, etype, wtype, cout, cin, ctype, l, pe, verbose=False):
-    b, e, max_pe = (find_gain if wtype == Wtype.DROP
+    data = (find_gain if wtype == Wtype.DROP
                     else find_drop)(pread, cp, perrors, i, etype, cout, cin, ctype, l, pe, verbose)
-    return ErrorIntvl(b=b, e=e, pe=max_pe)
+    if data is None:
+        return None
+    else:
+        b, e, max_pe = data
+        return ErrorIntvl(b=b, e=e, pe=max_pe)
 
 
 def find_walls(pread: ProfiledRead,
@@ -210,17 +224,20 @@ def find_walls(pread: ProfiledRead,
                min_cnt_cng: int = 3,
                max_cnt_cng: int = 5,
                verbose: bool = False):
+    """List all (candidates of) walls and calculate Pr{E in self} for each interval.
+
+    NOTE: It is fine to somewhat over-detect candidates of E-intervals.
+          The most important thing here is to calculate Pr{E} for all candidates.
+    """
     perrors = {}   # perrors[i, etype, wtype]
     walls = {etype: set() for etype in Etype}
     e_intvls, o_intvls = set(), set()
-    # Already-paired wall positions
-    paired_walls = {etype: set() for etype in Etype}
+    paired_walls = {etype: set() for etype in Etype}   # Already-paired positions
 
     # Find E-intvls by single errors
     for i in range(1, pread.length):
         cim1, ci = pread.counts[i - 1:i + 1]
-        # TODO: >R でも erate が高ければ wall cand に入れる？
-        if min(cim1, ci) >= cp.depths['R']:
+        if min(cim1, ci) >= cp.depths['R']:   # TODO: check the possibility of high count E-mers
             continue
         cng = abs(cim1 - ci)
         if cng < min_cnt_cng:
@@ -229,7 +246,7 @@ def find_walls(pread: ProfiledRead,
         # Find context type and length that gives max error prob
         wtype, cout, cin = ((Wtype.DROP, cim1, ci) if cim1 > ci
                             else (Wtype.GAIN, ci, cim1))
-        max_ctx, max_l, max_pe = None, None, -np.inf
+        max_ctx, max_l, max_pe = None, None, -inf
         for ctype in Ctype:
             l = pread.ctx[i][ctype.value][wtype.value]
             pe = cp.emodels[ctype.value].pe(l)
@@ -278,18 +295,21 @@ def find_walls(pread: ProfiledRead,
                     if perrors[i, etype, wtype] >= PE_THRES[ThresT.FINAL][etype]:
                         intvl = find_pair(pread, cp, perrors, i, etype, wtype,
                                           cout, cin, max_ctx, max_l, max_pe, verbose)
-                        if verbose:
-                            print(
-                                f"intvl ({intvl.b},{intvl.e}) pe={intvl.pe} ", end='')
-                        if intvl.pe >= PE_THRES[ThresT.FINAL][etype]:
-                            walls[etype] |= set([intvl.b, intvl.e])
-                            e_intvls.add(intvl)
-                            paired_walls[etype] |= set([intvl.b, intvl.e])
-                            if verbose:
-                                print(f"[S WALL & INTVL]")
+                        if intvl is None:
+                            walls[etype].add(i)   # TODO: is it OK?
                         else:
                             if verbose:
-                                print()
+                                print(
+                                    f"intvl ({intvl.b},{intvl.e}) pe={intvl.pe} ", end='')
+                            if intvl.pe >= PE_THRES[ThresT.FINAL][etype]:
+                                walls[etype] |= set([intvl.b, intvl.e])
+                                e_intvls.add(intvl)
+                                paired_walls[etype] |= set([intvl.b, intvl.e])
+                                if verbose:
+                                    print(f"[S WALL & INTVL]")
+                            else:
+                                if verbose:
+                                    print()
                     else:
                         if verbose:
                             print()
@@ -306,25 +326,28 @@ def find_walls(pread: ProfiledRead,
                     if verbose:
                         print(f"pe={perrors[i, etype, wtype]} ", end='')
                     if perrors[i, etype, wtype] < PE_THRES[ThresT.FINAL][etype]:
-                        # 　NOTE: wall by non-O は片方だけで決まっている
+                        # Never paired
                         walls[etype].add(i)
                         if verbose:
                             print(f"[O WALL]")
                     else:
                         intvl = find_pair(pread, cp, perrors, i, etype, wtype,
                                           cout, cin, max_ctx, max_l, max_pe, verbose)
-                        if verbose:
-                            print(
-                                f"intvl ({intvl.b},{intvl.e}) pe={intvl.pe} ", end='')
-                        if intvl.pe < PE_THRES[ThresT.FINAL][etype]:
-                            walls[etype].add(i)
-                            if verbose:
-                                print(f"[O WALL]")
+                        if intvl is None:
+                            walls[etype].add(i)   # TODO: is it OK?
                         else:
-                            o_intvls.add(intvl)
-                            paired_walls[etype] |= set([intvl.b, intvl.e])
                             if verbose:
-                                print(f"[O INTVL]")
+                                print(
+                                    f"intvl ({intvl.b},{intvl.e}) pe={intvl.pe} ", end='')
+                            if intvl.pe < PE_THRES[ThresT.FINAL][etype]:
+                                walls[etype].add(i)
+                                if verbose:
+                                    print(f"[O WALL]")
+                            else:
+                                o_intvls.add(intvl)
+                                paired_walls[etype] |= set([intvl.b, intvl.e])
+                                if verbose:
+                                    print(f"[O INTVL]")
         if verbose:
             print()
 
@@ -336,11 +359,10 @@ def find_walls(pread: ProfiledRead,
         for i in range(e_intvl.b + 1, e_intvl.e):
             walls[Etype.OTHERS].discard(i)
 
-    # Find E-intvls by multiple errors
+    # Find E-intvls by multiple errors and boundary E-intvls
     e_intvls_single_pos = set([(I.b, I.e) for I in e_intvls])
     e_intvls_multi = set()
     already_paired = set()
-    # NOTE: 多めに検出されてもよい、重要なのは Pr(error in S)
     pt = PE_THRES[ThresT.FINAL][Etype.SELF]
     for i in sorted(walls[Etype.OTHERS] - walls[Etype.SELF]):
         if i in already_paired:
@@ -351,10 +373,19 @@ def find_walls(pread: ProfiledRead,
                 pe_i = perrors[key_i]
                 if pe_i < pt:
                     continue
-                search_range = (range(i + 1, min(i + 200, pread.length))
+                search_range = (range(i + 1, min(i + 200, pread.length + 1))
                                 if wtype == Wtype.DROP
                                 else reversed(range(max(i - 200, 0), i)))
                 for j in search_range:
+                    if j == 0 or j == pread.length:   # Boundary intervals
+                        pe = pe_i * pe_i
+                        if pe >= pt:
+                            b, e = (0, i) if j == 0 else (i, pread.length)
+                            e_intvls_multi.add(ErrorIntvl(b=b, e=e, pe=pe))
+                            already_paired.add(i)
+                            if verbose:
+                                logger.info(
+                                    f"Boundary ({b},{e}): pe={pe}")
                     if j not in (walls[Etype.OTHERS] | walls[Etype.SELF]):
                         continue
                     if wtype == Wtype.DROP:
@@ -369,8 +400,9 @@ def find_walls(pread: ProfiledRead,
                                 continue
                             e_intvls_multi.add(ErrorIntvl(b=b, e=e, pe=pe))
                             already_paired |= set([i, j])
-                            logger.info(
-                                f"Multi(from {wtype}) ({i},{j}): pe={pe}")
+                            if verbose:
+                                logger.info(
+                                    f"Multi(from {wtype}) ({b},{e}): pe={pe}")
                     if j in walls[Etype.OTHERS]:
                         break
     for e_intvl in e_intvls_multi:
@@ -378,7 +410,7 @@ def find_walls(pread: ProfiledRead,
             walls[Etype.OTHERS].discard(i)
     e_intvls |= e_intvls_multi
 
-    # Remove E-intvls contained E-intvls
+    # Remove E-intvls fully contained within E-intvls
     e_intvls_to_be_removed = set()
     for I in e_intvls:
         for J in e_intvls:
@@ -398,7 +430,8 @@ def find_walls(pread: ProfiledRead,
         while j < len(sorted_e_intvls) - 1:
             I, J = sorted_e_intvls[j: j + 2]
             if I.b < J.b and J.b < I.e and I.e < J.e:
-                logger.info(f"Merged ({I.b},{I.e}) & ({J.b},{J.e})")
+                if verbose:
+                    logger.info(f"Merged ({I.b},{I.e}) & ({J.b},{J.e})")
                 j += 1
             else:
                 break
@@ -429,21 +462,13 @@ def find_walls(pread: ProfiledRead,
     for i in sorted(walls[Etype.SELF] | walls[Etype.OTHERS]):
         merged_walls[i] = True
 
-    # NOTE: 目的は E-intvl の決定ではなく E prob の計算 (なので、多めの intvl に対して E prob を計算しておく)
-
-    ws, wo = [walls[etype] for etype in Etype]
-    logger.info(
-        f"# of walls = {len(ws)} (S), {len(wo)} (O), {len(ws & wo)} (S&O)")
-
-#     logger.info(f"S & O (wall by E in S) = {sorted(ws & wo)}")
-    logger.info(
-        f"only S (wall by E in S but also explained by E in O) = {sorted(ws - wo)}")
-    logger.info(f"only O (wall by not E in S) = {sorted(wo - ws)}")
-
-    logger.info(
-        f"E-intvls = {[(I.b, I.e) for I in sorted(e_intvls, key=lambda I: I.b)]}")
-    logger.info(
-        f"O-intvls = {[(I.b, I.e) for I in sorted(o_intvls, key=lambda I: I.b)]}")
+    if verbose:
+        ws, wo = [walls[etype] for etype in Etype]
+        logger.info(f"# of walls = {len(ws)} (S), {len(wo)} (O), {len(ws & wo)} (S&O)\n"
+                    f"only S (wall by E in S but also explained by E in O) = {sorted(ws - wo)}\n"
+                    f"only O (wall by not E in S) = {sorted(wo - ws)}\n"
+                    f"E-intvls = {[(I.b, I.e) for I in sorted(e_intvls, key=lambda I: I.b)]}\n"
+                    f"O-intvls = {[(I.b, I.e) for I in sorted(o_intvls, key=lambda I: I.b)]}")
 
     # Determine walls and intervals from `walls` and `*_intvls`
     pread.walls = sorted(walls[Etype.SELF] | walls[Etype.OTHERS] | set([0, pread.length]))
@@ -453,12 +478,17 @@ def find_walls(pread: ProfiledRead,
         b, e = pread.walls[i:i + 2]
         pread.intvls.append(
             Intvl(b=b, e=e,
-                  pe=(e_intvls_by_pos[(b, e)].pe if (b, e) in e_intvls_by_pos
-                      else -np.inf),
+                  pe=(e_intvls_by_pos[(b, e)].pe if (b, e) in e_intvls_by_pos   # TODO: log pe?
+                      else 0.),
+                  pe_o=PerrorInO(b=max([perrors[b, Etype.OTHERS, wtype]
+                                        if (b, Etype.OTHERS, wtype) in perrors else 0.   # TODO: perrors=defaultdict(lambda: 0.)
+                                        for wtype in Wtype]),
+                                 e=max([perrors[e, Etype.OTHERS, wtype]
+                                        if (e, Etype.OTHERS, wtype) in perrors else 0.
+                                        for wtype in Wtype])),
                   cb=pread.counts[b],
                   ce=pread.counts[e - 1]))
 
-#     pread.perrors = perrors
     pread.e_intvls = e_intvls
     pread.o_intvls = o_intvls
 
@@ -494,14 +524,16 @@ def correct_wall_cnt(I, pread):
 
 
 def is_reliable(I, pread, cp, verbose=False):
-    if I.e - I.b < pread.K:   # |I| >= K
+    # Requirment 1: |I| >= K
+    if I.e - I.b < pread.K:
         return None
-    if max(I.cb, I.ce) >= cp.depths['R']:   # Not > R-cov
+    # Requirment 2: Not > R-cov
+    if max(I.cb, I.ce) >= cp.depths['R']:   # TODO: check again after count correction?
         return None
-    # Not E-intvl, i.e. Pr{E in S} >= Threshold
+    # Requirment 3: Unlikely to be E-intvl
     if I.pe >= PE_THRES[ThresT.FINAL][Etype.SELF]:
         return None
-    # Smooth *after* count correction, i.e. Skellam(cb-ce,lambda,lambda) >= Threshold where lambda = |I|*D/L
+    # Requirment 4: Smooth after count correction
     correct_wall_cnt(I, pread)
     p_trans = calc_p_trans(I.b, I.e, I.ccb, I.cce,
                            (I.ccb + I.cce) // 2, cp.read_len)
@@ -509,6 +541,7 @@ def is_reliable(I, pread, cp, verbose=False):
         if verbose:
             print(f"({I.b},{I.e}): p_trans={p_trans} < {PTHRES_DIFF_REL}")
         return None
+    I.is_rel = True
     return I
 
 

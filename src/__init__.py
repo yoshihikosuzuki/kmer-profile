@@ -1,7 +1,7 @@
-from ._type import (Ctype, Etype, Wtype, STATES, CtxLenT, CoutT, CinT,
+from ._type import (Ctype, Etype, Wtype, STATES, StateT, 
                     ErrorModel, ThresT, PerrorThres, CountThres,
-                    SeqCtx, ErrorIntvl, Intvl, ProfiledRead)
+                    SeqCtx, PerrorInO, ErrorIntvl, Intvl, ProfiledRead)
 from ._const import *
 from ._core import *
 from ._plot import *
-from ._main import ClassParams, classify_read
+from ._main import ClassParams, classify_read, classify_read_by_id, classify_reads, main
