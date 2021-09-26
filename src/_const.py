@@ -35,7 +35,7 @@ OFFSET = 1000             # Larger == Allow larger count difference between clos
 # PTHRES_TRANS_REL = 1e-3   # For H < D < R requirment
 N_SIGMA_R = 2             # R-cov = D-cov + `N_SIGMA_R`-sigma
 R_LOGP = -10.             # Pr{R-interval} = this value, to prioritize other classes with a somewhat high probability
-E_PO_BASE = -0.          # Add this value to Pr{E-interval} to avoid over-classification in low-cov regions
+E_PO_BASE = -10.          # Add this value to Pr{E-interval} to avoid over-classification in low-cov regions
 
 
 ### ------------------------------ ###

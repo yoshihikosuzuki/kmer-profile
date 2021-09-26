@@ -11,9 +11,12 @@ from ._util import calc_logp_trans
 
 
 def classify_rel(pread, cp, verbose):
-    cr_f, df, hf = classify_rel_fw(pread, cp, verbose)
-    cr_b, db, hb = classify_rel_bw(pread, cp, verbose)
-    cr = cr_f if df + hf <= db + hb else cr_b
+    cr_f, df, hf, hdrrf = classify_rel_fw(pread, cp, verbose)
+    cr_b, db, hb, hdrrb = classify_rel_bw(pread, cp, verbose)
+
+    # By the ratio of HD-ratios (very slightly better then above)
+    cr = cr_f if abs(hdrrf - 1.) <= abs(hdrrb - 1.) else cr_b
+
     asgn = cr.asgn
     for I, s in zip(pread.rel_intvls, asgn):
         I.asgn = s
@@ -52,7 +55,8 @@ def classify_rel_fw(pread, cp, verbose):
     h_intvls = list(filter(lambda I: I.asgn == 'H', pread.rel_intvls))
     d_diff = abs(d_intvls[0].ccb - d_intvls[-1].cce) if len(d_intvls) > 0 else 0
     h_diff = abs(h_intvls[0].ccb - h_intvls[-1].cce) if len(h_intvls) > 0 else 0
-    return (cr_f, d_diff, h_diff)
+    hdrr = (d_intvls[0].ccb / h_intvls[0].ccb) / (d_intvls[-1].cce / h_intvls[0].cce) if len(d_intvls) > 0 and len(h_intvls) > 0 else 1
+    return (cr_f, d_diff, h_diff, hdrr)
 
 
 def classify_rel_bw(pread, cp, verbose):
@@ -86,7 +90,8 @@ def classify_rel_bw(pread, cp, verbose):
     h_intvls = list(filter(lambda I: I.asgn == 'H', pread.rel_intvls))
     d_diff = abs(d_intvls[0].ccb - d_intvls[-1].cce) if len(d_intvls) > 0 else 0
     h_diff = abs(h_intvls[0].ccb - h_intvls[-1].cce) if len(h_intvls) > 0 else 0
-    return (cr_b, d_diff, h_diff)
+    hdrr = (d_intvls[0].ccb / h_intvls[0].ccb) / (d_intvls[-1].cce / h_intvls[0].cce) if len(d_intvls) > 0 and len(h_intvls) > 0 else 1
+    return (cr_b, d_diff, h_diff, hdrr)
 
 
 def _log(x): return -inf if x == 0. else log(x)
@@ -264,21 +269,6 @@ class ClassRel:
             return R_LOGP
         return logp
 
-    # def logp_hd(self, s: StateT, i: int, st_pred: CovsT) -> float:
-    #     I = self.intvls[i]
-    #     beg_pos, beg_cnt, _, _ = self._expand_intvl(I)
-    #     st = st_pred[s]
-
-    #     logp_sf = calc_logp_trans(self._pred(st.pos), beg_pos,
-    #                               st.cnt, beg_cnt,
-    #                               st.cnt, self.cp.read_len)
-    #     logp_er = -inf
-    #     logp = max(logp_sf, logp_er)
-    #     if self.verbose_prob:
-    #         print(f"SF={logp_sf:5.0f}{'*' if logp_sf >= logp_er else ' '} "
-    #               f"ER={logp_er:5.0f}{'*' if logp_er >= logp_sf else ' '}")
-    #     return logp
-
     def logp_h(self, i: int, st_pred: CovsT, s: StateT) -> float:
         I = self.intvls[i]
         beg_pos, beg_cnt, _, _ = self._expand_intvl(I)
@@ -450,6 +440,13 @@ class ClassRel:
                             s + bt[i_pred, s])
                 st[i, s] = st[i_pred, s]
             return
+
+        # Let Pr{best pred = H -> H} == Pr{best pred = D -> D} because larger counts allow higher fluctuation,
+        # resulting in shift to D in the middle of H curve
+        max_s_h, _ = self._find_max_dp_trans(i, logp_trans, t='H')
+        max_s_d, _ = self._find_max_dp_trans(i, logp_trans, t='D')
+        if max_s_h == 'H' and max_s_d == 'D':
+            logp_trans['H', 'H'] = logp_trans['D', 'D'] = min(logp_trans['H', 'H'], logp_trans['D', 'D'])
 
         # Find best path for each state and update estimated coverages
         for t in STATES:
