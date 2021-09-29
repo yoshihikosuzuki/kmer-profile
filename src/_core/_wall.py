@@ -115,7 +115,7 @@ def find_gain(pread, cp, perrors, i, etype, cout, cin, ctype, clen, cerate, verb
             continue
 
         if (etype == Etype.SELF
-                or calc_p_diff_pair(i, j, pread, cp) < PTHRES_DIFF_EO):
+                or calc_p_diff_pair(i, j, pread, cp) < PTHRES_DIFF_EO):   # FIXME: SELF always skipped!!
             continue
 
         pe_i = calc_p_error(cout, cin, HC_ERATE, etype)
@@ -446,7 +446,7 @@ def find_walls(pread: ProfiledRead,
     e_intvls -= e_intvls_to_be_removed
     e_intvls |= e_intvls_to_be_added
 
-    # Remove O-intvls contained E-intvls
+    # Remove O-intvls contained in E-intvls
     o_intvls_to_be_removed = set()
     for I in o_intvls:
         for J in e_intvls:

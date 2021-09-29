@@ -28,7 +28,7 @@ PTHRES_DIFF_REL = 1e-4   # in [0, 1]; Larger == Fewer reliable intervals == More
 
 
 ### ------------------------------ ###
-#    Perror thresholds
+#    Rel class thresholds
 ### ------------------------------ ###
 
 OFFSET = 1000             # Larger == Allow larger count difference between close positions in the same class

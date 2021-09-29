@@ -1,5 +1,8 @@
 # kmer-profile
-Scripts for kmer profile analysis
+
+A [Dash](https://plotly.com/dash/) app for interactive visualization of read profiles generated with [FASTK](https://github.com/thegenemyers/FASTK).
+
+This package also contains python version of [ClassPro](https://github.com/yoshihikosuzuki/ClassPro), but it is not intended only for development.
 
 ## Requirements
 
@@ -9,7 +12,7 @@ Followings are required to be installed before installing this package (i.e. the
 - [FASTK](https://github.com/thegenemyers/FASTK)
 - [FASTK_python](https://github.com/yoshihikosuzuki/FASTK_python)
 
-## Optional requirements
+### Optional requirements
 
 - Followings must be installed in your `PATH` if necessary
   - [Seqkit](https://bioinf.shenwei.me/seqkit/) (if you use fasta/fastq files)
@@ -25,11 +28,9 @@ $ python3 setup.py install
 
 A binary executable for visualization, `kmer_profile`, is installed in addition to a python module.
 
-## How to use
+## How to use the visualizer
 
 You are supposed to have FastK's outputs with the `-p` option (i.e. you need to have a `.prof` file) for your dataset.
-
-### Visualize k-mer count histogram and count profile
 
 Run the following command and then open `http://localhost:8050` in a browser (port number can be changed with the option `-p`).
 
@@ -67,6 +68,5 @@ optional arguments:
   -d, --debug_mode      Run a Dash server in a debug mode.
 ```
 
-**!!! IMPORTANT !!!**
-
-If you use `DOWNLOAD HTML` buttons in the viewer, disable your browser's cache (only in the viewer's tab) For example, in Chrome, go to `Developer Tool` → `Network` tab → `Disable cache` checkbox and keep the Developer Tool open while using the viewer.
+**[NOTE]**
+To use `DOWNLOAD HTML` buttons in the app, you might need to disable your browser's cache (only of the appr's tab). To do this, e.g. in Chrome, go to `Developer Tool` → `Network` tab → `Disable cache` checkbox and keep the Developer Tool open while using the viewer.

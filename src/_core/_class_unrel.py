@@ -5,7 +5,7 @@ from scipy.stats import poisson, binom
 from .. import Etype, STATES, StateT, Intvl, ProfiledRead, E_PO_BASE, R_LOGP
 from .._plot import color_asgn
 from .._main import ClassParams
-from ._util import minus_sigma, linear_interplation, calc_logp_trans, calc_p_error
+from ._util import minus_sigma, linear_interpolation, calc_logp_trans, calc_p_error
 
 
 def classify_unrel(pread, cp, verbose, verbose_prob=False):
@@ -133,7 +133,7 @@ class ClassUnrel:
         l, r = self._find_nn(i, s, only_rel=True)
         if l is not None and r is not None:
             L, R = intvls[l], intvls[r]
-            return linear_interplation(x, (L.e - 1, L.cce), (R.b, R.ccb))
+            return linear_interpolation(x, (L.e - 1, L.cce), (R.b, R.ccb))
         elif l is not None:
             L = intvls[l]
             return L.cce   # TODO: better estimation using H intervals and H-D ratio

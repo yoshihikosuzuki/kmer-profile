@@ -18,9 +18,9 @@ def minus_sigma(cnt: int,
     return plus_sigma(cnt, -sigma)
 
 
-def linear_interplation(x: int,
-                        p1: Tuple[int, int],
-                        p2: Tuple[int, int]) -> int:
+def linear_interpolation(x: int,
+                         p1: Tuple[int, int],
+                         p2: Tuple[int, int]) -> int:
     # TODO: use PosCnt
     x1, y1 = p1
     x2, y2 = p2
