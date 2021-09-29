@@ -2,7 +2,7 @@
 
 A [Dash](https://plotly.com/dash/) app for interactive visualization of read profiles generated with [FASTK](https://github.com/thegenemyers/FASTK).
 
-This package also contains python version of [ClassPro](https://github.com/yoshihikosuzuki/ClassPro), but it is not intended only for development.
+This package also contains python version of [ClassPro](https://github.com/yoshihikosuzuki/ClassPro), but it is only for development and not intended for usage by users.
 
 ## Requirements
 
