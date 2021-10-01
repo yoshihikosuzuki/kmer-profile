@@ -15,7 +15,7 @@ from dash.exceptions import PreventUpdate
 from bits.seq import load_fastq
 from bits.util import RelCounter
 import fastk
-from . import ProfiledRead, CountHistVisualizer, ProfiledReadVisualizer, load_pread
+from . import ProfiledRead, CountHistVisualizer, PreadVisualizer, load_pread
 
 
 server = Flask(__name__)
@@ -45,9 +45,9 @@ class Cache:
     args:   argparse.Namespace = None
     cdv:    Optional[CountHistVisualizer] = None
     pread:  Optional[ProfiledRead] = None
-    prv:    Optional[ProfiledReadVisualizer] = None
+    prv:    Optional[PreadVisualizer] = None
     tpread: Optional[ProfiledRead] = None
-    tprv:   Optional[ProfiledReadVisualizer] = None
+    tprv:   Optional[PreadVisualizer] = None
 
 
 cache = Cache()
@@ -151,8 +151,9 @@ def update_kmer_profile(_n_clicks_profile: int,
             raise PreventUpdate
         cache.pread.states = (None if cache.args.class_fname is None
                               else load_fastq(cache.args.class_fname, read_id).qual[cache.pread.K - 1:])
-        cache.prv = (ProfiledReadVisualizer(max_count=max_count, use_webgl=True)
-                     .add_pread(cache.pread, show_init_states="SHOW" in class_init))
+        cache.prv = (PreadVisualizer(cache.pread, max_count=max_count, use_webgl=True)
+                     .add_counts()
+                     .add_states(show_init="SHOW" in class_init))
         new_fig = cache.prv.show(layout=reset_axes(fig),
                                  return_fig=True)
         pl.show(new_fig, out_html="kmer_prof.html", do_not_display=True)
@@ -161,8 +162,9 @@ def update_kmer_profile(_n_clicks_profile: int,
         if cache.args.truth_class_fname is not None:
             cache.tpread = deepcopy(cache.pread)
             cache.tpread.states = load_fastq(cache.args.truth_class_fname, read_id).qual[cache.pread.K - 1:]
-            cache.tprv = (ProfiledReadVisualizer(max_count=max_count, use_webgl=True)
-                          .add_pread(cache.tpread, show_init_states="SHOW" in class_init))
+            cache.tprv = (PreadVisualizer(cache.tpread, max_count=max_count, use_webgl=True)
+                          .add_counts()
+                          .add_states(show_init="SHOW" in class_init))
             new_tfig = cache.tprv.show(layout=reset_axes(tfig),
                                        return_fig=True)
         else:

@@ -2,7 +2,9 @@
 
 A [Dash](https://plotly.com/dash/) app for interactive visualization of read profiles generated with [FASTK](https://github.com/thegenemyers/FASTK).
 
-This package also contains python version of [ClassPro](https://github.com/yoshihikosuzuki/ClassPro), but it is only for development and not intended for usage by users.
+![Example view](assets/example-view.png)
+
+**NOTE**: This package also contains python version of [ClassPro](https://github.com/yoshihikosuzuki/ClassPro), but it is only for development and not intended for usage by users.
 
 ## Requirements
 
@@ -18,7 +20,7 @@ Followings are required to be installed before installing this package (i.e. the
   - [Seqkit](https://bioinf.shenwei.me/seqkit/) (if you use fasta/fastq files)
   - [DAZZ_DB](https://github.com/thegenemyers/DAZZ_DB) (if you use db/dam files)
 
-## How to install 
+## How to install
 
 ```bash
 $ git clone https://github.com/yoshihikosuzuki/kmer-profile
@@ -32,17 +34,12 @@ A binary executable for visualization, `kmer_profile`, is installed in addition 
 
 You are supposed to have FastK's outputs with the `-p` option (i.e. you need to have a `.prof` file) for your dataset.
 
-Run the following command and then open `http://localhost:8050` in a browser (port number can be changed with the option `-p`).
-
-```bash
-$ kmer_profiler [-s <sequence_file>] <fastk_prefix>
-```
-
-To show the help message, run `$ kmer_profile -h`:
+You can start the visualizer with the command named `kmer_profiler`. The usage is as follows (this message can also be shown via `$ kmer_profile -h`):
 
 ```text
-usage: kmer_profiler [-h] [-s SEQ_FNAME] [-c CLASS_FNAME] [-p PORT_NUMBER]
-                     [-f IMG_FORMAT] [-d]
+usage: kmer_profiler [-h] [-s SEQ_FNAME] [-c CLASS_FNAME]
+                     [-t TRUTH_CLASS_FNAME] [-p PORT_NUMBER] [-f IMG_FORMAT]
+                     [-d]
                      fastk_prefix
 
 K-mer count profile visualizer
@@ -60,6 +57,9 @@ optional arguments:
                         profile plot [None]
   -c CLASS_FNAME, --class_fname CLASS_FNAME
                         File name of K-mer classification result. [None]
+  -t TRUTH_CLASS_FNAME, --truth_class_fname TRUTH_CLASS_FNAME
+                        File name of ground truth of K-mer classification
+                        result. [None]
   -p PORT_NUMBER, --port_number PORT_NUMBER
                         Port number of localhost to run the server. [8050]
   -f IMG_FORMAT, --img_format IMG_FORMAT
@@ -67,6 +67,8 @@ optional arguments:
                         icon. ['svg']
   -d, --debug_mode      Run a Dash server in a debug mode.
 ```
+
+After running this, open `http://localhost:8050` (port number can be changed with the option `-p`) in a browser.
 
 **[NOTE]**
 To use `DOWNLOAD HTML` buttons in the app, you might need to disable your browser's cache (only of the appr's tab). To do this, e.g. in Chrome, go to `Developer Tool` → `Network` tab → `Disable cache` checkbox and keep the Developer Tool open while using the viewer.
