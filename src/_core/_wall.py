@@ -351,6 +351,10 @@ def find_walls(pread: ProfiledRead,
         if verbose:
             print()
 
+    # if verbose:
+    #     print(f"S-walls: {sorted(walls[Etype.SELF])}")
+    #     print(f"O-walls: {sorted(walls[Etype.OTHERS])}")
+
     # From walls by non-O, exclude positions explained by O or within E-intvls
     for o_intvl in o_intvls:
         for i in (o_intvl.b, o_intvl.e):
@@ -358,6 +362,10 @@ def find_walls(pread: ProfiledRead,
     for e_intvl in e_intvls:
         for i in range(e_intvl.b + 1, e_intvl.e):
             walls[Etype.OTHERS].discard(i)
+
+    # if verbose:
+    #     print(f"S-intvls: {sorted([(I.b, I.e) for I in e_intvls])}")
+    #     print(f"O-intvls: {sorted([(I.b, I.e) for I in o_intvls])}")
 
     # Find E-intvls by multiple errors and boundary E-intvls
     e_intvls_single_pos = set([(I.b, I.e) for I in e_intvls])
@@ -384,8 +392,7 @@ def find_walls(pread: ProfiledRead,
                             e_intvls_multi.add(ErrorIntvl(b=b, e=e, pe=pe))
                             already_paired.add(i)
                             if verbose:
-                                logger.info(
-                                    f"Boundary ({b},{e}): pe={pe}")
+                                print(f"Boundary ({b},{e}): pe={pe}")
                     if j not in (walls[Etype.OTHERS] | walls[Etype.SELF]):
                         continue
                     if wtype == Wtype.DROP:
@@ -401,8 +408,7 @@ def find_walls(pread: ProfiledRead,
                             e_intvls_multi.add(ErrorIntvl(b=b, e=e, pe=pe))
                             already_paired |= set([i, j])
                             if verbose:
-                                logger.info(
-                                    f"Multi(from {wtype}) ({b},{e}): pe={pe}")
+                                print(f"Multi(from {wtype}) ({b},{e}): pe={pe}")
                     if j in walls[Etype.OTHERS]:
                         break
     for e_intvl in e_intvls_multi:
@@ -431,7 +437,7 @@ def find_walls(pread: ProfiledRead,
             I, J = sorted_e_intvls[j: j + 2]
             if I.b < J.b and J.b < I.e and I.e < J.e:
                 if verbose:
-                    logger.info(f"Merged ({I.b},{I.e}) & ({J.b},{J.e})")
+                    print(f"Merged ({I.b},{I.e}) & ({J.b},{J.e})")
                 j += 1
             else:
                 break
@@ -464,11 +470,11 @@ def find_walls(pread: ProfiledRead,
 
     if verbose:
         ws, wo = [walls[etype] for etype in Etype]
-        logger.info(f"# of walls = {len(ws)} (S), {len(wo)} (O), {len(ws & wo)} (S&O)\n"
-                    f"only S (wall by E in S but also explained by E in O) = {sorted(ws - wo)}\n"
-                    f"only O (wall by not E in S) = {sorted(wo - ws)}\n"
-                    f"E-intvls = {[(I.b, I.e) for I in sorted(e_intvls, key=lambda I: I.b)]}\n"
-                    f"O-intvls = {[(I.b, I.e) for I in sorted(o_intvls, key=lambda I: I.b)]}")
+        print(f"# of walls = {len(ws)} (S), {len(wo)} (O), {len(ws & wo)} (S&O)\n"
+              f"only S (wall by E in S but also explained by E in O) = {sorted(ws - wo)}\n"
+              f"only O (wall by not E in S) = {sorted(wo - ws)}\n"
+              f"E-intvls = {[(I.b, I.e) for I in sorted(e_intvls, key=lambda I: I.b)]}\n"
+              f"O-intvls = {[(I.b, I.e) for I in sorted(o_intvls, key=lambda I: I.b)]}")
 
     # Determine walls and intervals from `walls` and `*_intvls`
     pread.walls = sorted(walls[Etype.SELF] | walls[Etype.OTHERS] | set([0, pread.length]))

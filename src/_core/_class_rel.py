@@ -13,13 +13,23 @@ from ._util import calc_logp_trans
 def classify_rel(pread, cp, verbose):
     cr_f, df, hf, hdrrf = classify_rel_fw(pread, cp, verbose)
     cr_b, db, hb, hdrrb = classify_rel_bw(pread, cp, verbose)
+    
+    if verbose:
+        print(f"  FWD: {color_asgn(cr_f.asgn)}")
+        print(f"  BWD: {color_asgn(cr_b.asgn)}")
+        print(f"hdrr FWD={hdrrf}, BWD={hdrrb}")
 
     # By the ratio of HD-ratios (very slightly better then above)
     cr = cr_f if abs(hdrrf - 1.) <= abs(hdrrb - 1.) else cr_b
 
     asgn = cr.asgn
+    if verbose:
+        print(f"  REL: ", end='')
     for I, s in zip(pread.rel_intvls, asgn):
         I.asgn = s
+        if verbose:
+            print(f"{color_asgn(I.asgn)}", end='')
+    print()
     return cr_f, cr_b
 
 
