@@ -8,8 +8,7 @@ import plotly.graph_objects as go
 import plotly_light as pl
 from flask import Flask, send_from_directory
 import dash
-import dash_html_components as html
-import dash_core_components as dcc
+from dash import html, dcc
 from dash.dependencies import Input, Output, State
 from dash.exceptions import PreventUpdate
 from bits.seq import load_fastq

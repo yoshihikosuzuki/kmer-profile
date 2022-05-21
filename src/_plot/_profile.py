@@ -80,7 +80,8 @@ class PreadVisualizer:
                    names: Tuple[len(STATES) * (str,)] = STATE_NAMES,
                    show_legend: bool = True,
                    show_init: bool = True) -> PreadVisualizer:
-        assert self.pread.states is not None, "No classificatons available"
+        if self.pread.states is None:
+            return self
         state_pos = [list(filter(lambda i: self.pread.states[i] == s, self.pos_list))
                      for s in STATES]
         return self.add_traces(
