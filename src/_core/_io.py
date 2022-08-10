@@ -12,9 +12,9 @@ def load_read(seq_fname: str,
               read_id: Optional[Union[int, Tuple[int, int]]],
               verbose: bool = False) -> Read:
     ext = splitext(seq_fname)[1]
-    assert ext in (".db", ".dam", ".fasta", ".fastq"), "Unsupported file type"
+    assert ext in (".db", ".dam", ".fasta", ".fastq", ".class"), "Unsupported file type"
     load_func = (load_fasta if ext == ".fasta"
-                 else load_fastq if ext == ".fastq"
+                 else load_fastq if ext in (".fastq", ".class")
                  else load_db)
     return load_func(seq_fname, read_id, case="upper", verbose=verbose)
 

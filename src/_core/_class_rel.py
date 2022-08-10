@@ -10,17 +10,57 @@ from .._main import ClassParams
 from ._util import calc_logp_trans
 
 
+def is_eq_prefix(eqs):
+    if eqs[0] != True:
+        return False
+    i = 1
+    while i < len(eqs) and eqs[i]:
+        i += 1
+    while i < len(eqs):
+        if eqs[i]:
+            return False
+        i += 1
+    return True
+
+def is_eq_suffix(eqs):
+    if eqs[len(eqs) - 1] != True:
+        return False
+    i = len(eqs) - 2
+    while i >= 0 and eqs[i]:
+        i -= 1
+    while i >= 0:
+        if eqs[i]:
+            return False
+        i -= 1
+    return True
+
+
 def classify_rel(pread, cp, verbose):
     cr_f, df, hf, hdrrf = classify_rel_fw(pread, cp, verbose)
     cr_b, db, hb, hdrrb = classify_rel_bw(pread, cp, verbose)
     
     if verbose:
         print(f"  FWD: {color_asgn(cr_f.asgn)}")
-        print(f"  BWD: {color_asgn(cr_b.asgn)}")
-        print(f"hdrr FWD={hdrrf}, BWD={hdrrb}")
+        if cr_f.asgn == cr_b.asgn:
+            print(f"BWD: (= FWD)")
+        else:
+            print(f"  BWD: {color_asgn(cr_b.asgn)}")
+            print(f"hdrr FWD={hdrrf}, BWD={hdrrb}")
 
     # By the ratio of HD-ratios (very slightly better then above)
-    cr = cr_f if abs(hdrrf - 1.) <= abs(hdrrb - 1.) else cr_b
+    # cr = cr_f if abs(hdrrf - 1.) <= abs(hdrrb - 1.) else cr_b
+
+    if cr_f.asgn == cr_b.asgn:
+        cr = cr_f
+    else:
+        # Check if prefix/suffix is identical
+        eqs = [f == b for f, b in zip(cr_f.asgn, cr_b.asgn)]
+        if is_eq_prefix(eqs):
+            cr = cr_f
+        elif is_eq_suffix(eqs):
+            cr = cr_b
+        else:
+            cr = cr_f if abs(hdrrf - 1.) <= abs(hdrrb - 1.) else cr_b   # TODO: better selection method?
 
     asgn = cr.asgn
     if verbose:
@@ -510,8 +550,8 @@ class ClassRel:
                                 'D': PosCnt(self._offset(end_pos), curr_d),
                                 'R': PosCnt(self._offset(end_pos), curr_r)}
                 # H < D < R requirement
-                if not (st[i, t]['H'].cnt + 5 < st[i, t]['D'].cnt
-                        and st[i, t]['D'].cnt + 5 < st[i, t]['R'].cnt):
+                if not (st[i, t]['H'].cnt < st[i, t]['D'].cnt
+                        and st[i, t]['D'].cnt < st[i, t]['R'].cnt):
                     dp[i, t] = -inf
 
         if self.verbose:
@@ -535,7 +575,7 @@ class ClassRel:
                     else:
                         _asgn = ''.join(list(reversed(self._set_r_asgn(list(reversed(bt[i, t])),
                                                                        {self.N - 1 - rp for rp in self.rpos}))))
-                    _arrow = "->" if self.F else "<-"
+                    _arrow = "->"# if self.F else "<-"
                     print(f" {color_asgn(max_s)}{_arrow}{color_asgn(t)}"
                           f"({dp[i, t]:5.0f}; {self._st_to_str(st[i_pred, max_s])}{_arrow}{self._st_to_str(st[i, t])})"
                           f"{'*' if t == max_t else ' '} {color_asgn(_asgn)}", end='')

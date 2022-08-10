@@ -40,20 +40,41 @@ def build_download_button(fname: str, name: str) -> html.Form:
 
 @dataclass(repr=False, eq=False)
 class Cache:
-    """Cache for data that are needed to be shared over multiple operations."""
-    args:   argparse.Namespace = None
-    cdv:    Optional[CountHistVisualizer] = None
-    pread:  Optional[ProfiledRead] = None
-    prv:    Optional[PreadVisualizer] = None
-    tpread: Optional[ProfiledRead] = None
-    tprv:   Optional[PreadVisualizer] = None
+    """Cached data shared across multiple operations.
+
+    Variables:
+        - args  <argparse.Namespace>           : Command line arguments.
+        - has_class <bool>: .class file is provided or not.
+        - has_tclass <bool>: Ground-truth .class file is provided or not.
+        - cdv   <Optional[CountHistVisualizer]>: Count histogram plot object.
+        - pread <Optional[ProfiledRead])>      : Count profile object.
+        - prv   <Optional[PreadVisualizer]>    : Count profile plot object.
+        - tpead <Optional[ProfiledRead]>       : Ground-truth count profile object.
+        - tprv  <Optional[PreadVisualizer]>    : Ground-truth count profile plot object.
+    """
+    args:       argparse.Namespace = None
+    has_class:  bool = False
+    has_tclass: bool = False
+    cdv:        Optional[CountHistVisualizer] = None
+    pread:      Optional[ProfiledRead] = None
+    prv:        Optional[PreadVisualizer] = None
+    tpread:     Optional[ProfiledRead] = None
+    tprv:       Optional[PreadVisualizer] = None
 
 
 cache = Cache()
 
 
 def reset_axes(fig: go.Figure) -> go.Layout:
-    """Return the layout of the figure with reset axes."""
+    """
+    Return the layout of the figure with reset axes.
+
+    Args:
+        fig (go.Figure): _description_
+
+    Returns:
+        go.Layout: _description_
+    """
     return pl.merge_layout(fig["layout"] if "layout" in fig else None,
                            pl.make_layout(x_range=None, y_range=None))
 
@@ -145,11 +166,11 @@ def update_kmer_profile(_n_clicks_profile: int,
         # Draw a k-mer count profile from scratch
         cache.pread = load_pread(read_id,
                                  cache.args.fastk_prefix,
-                                 cache.args.seq_fname)
+                                 cache.args.class_fname)
         if cache.pread is None:
             raise PreventUpdate
-        cache.pread.states = (None if cache.args.class_fname is None
-                              else load_fastq(cache.args.class_fname, read_id).qual[cache.pread.K - 1:])
+        cache.pread.states = (load_fastq(cache.args.class_fname, read_id).qual[cache.pread.K - 1:] if cache.has_class
+                              else None)
         cache.prv = (PreadVisualizer(cache.pread, max_count=max_count, use_webgl=True)
                      .add_counts()
                      .add_states(show_init="SHOW" in class_init))
@@ -158,7 +179,7 @@ def update_kmer_profile(_n_clicks_profile: int,
         pl.show(new_fig, out_html="kmer_prof.html", do_not_display=True)
 
         # True profile
-        if cache.args.truth_class_fname is not None:
+        if cache.has_tclass:
             cache.tpread = deepcopy(cache.pread)
             cache.tpread.states = load_fastq(cache.args.truth_class_fname, read_id).qual[cache.pread.K - 1:]
             cache.tprv = (PreadVisualizer(cache.tpread, max_count=max_count, use_webgl=True)
@@ -223,16 +244,17 @@ def main():
                   dcc.Checklist(id='class-init',
                                 options=[{'label': 'Show classifications from the beginning',
                                           'value': 'SHOW'}],
-                                value=(["SHOW"] if cache.args.class_fname is not None else []))]),
+                                value=(["SHOW"] if cache.has_class or cache.has_tclass else []))]),
         dcc.Graph(id='fig-profile',
                   figure=go.Figure(layout=pl.layout(title="Read profile",
                                                     width=1800, height=500)),
-                  config=graph_config),
+                  config=graph_config,
+                  style={"display": "none"} if not cache.has_class and cache.has_tclass else {}),
         dcc.Graph(id='fig-true-profile',
                   figure=go.Figure(layout=pl.layout(title="Ground Truth",
                                                     width=1800, height=500)),
                   config=graph_config,
-                  style={"display": "none"} if cache.args.truth_class_fname is None else {})
+                  style={"display": "none"} if not cache.has_tclass else {})
     ])
     app.run_server(port=int(cache.args.port_number),
                    debug=cache.args.debug_mode)
@@ -247,23 +269,17 @@ def parse_args() -> argparse.Namespace:
         type=str,
         help="Prefix of FastK's output files. Both `<fastk_prefix>.hist` and `<fastk_prefix>.prof` must exist.")
     parser.add_argument(
-        "-s",
-        "--seq_fname",
-        type=str,
-        default=None,
-        help="Name of the input file for FastK containing reads. Must be .db/dam/fast[a|q]. Used for displaying baes in profile plot [None]")
-    parser.add_argument(
         "-c",
         "--class_fname",
         type=str,
         default=None,
-        help="File name of K-mer classification result. [None]")
+        help="Either a k-mer classification file by ClassPro (.class) or a sequence file (.db, .dam, or .fast[a|q]). [None]")
     parser.add_argument(
         "-t",
         "--truth_class_fname",
         type=str,
         default=None,
-        help="File name of ground truth of K-mer classification result. [None]")
+        help="A ground-trugh k-mer classification file. [None]")
     parser.add_argument(
         "-p",
         "--port_number",
@@ -284,10 +300,13 @@ def parse_args() -> argparse.Namespace:
     cache.args = args = parser.parse_args()
     for fname in [f"{args.fastk_prefix}.hist",
                   f"{args.fastk_prefix}.prof",
-                  args.seq_fname,
                   args.class_fname,
                   args.truth_class_fname]:
         assert fname is None or isfile(fname), f"{fname} does not exist"
+    if args.class_fname is not None and args.class_fname.endswith(".class"):
+        cache.has_class = True
+    if args.truth_class_fname is not None:
+        cache.has_tclass = True
 
 
 if __name__ == '__main__':

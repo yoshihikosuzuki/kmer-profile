@@ -36,10 +36,13 @@ class PreadVisualizer:
         return self
 
     def add_counts(self,
-                   col: str = "black",
+                   marker_size: int = 4,
+                   col_lines: str = "gray",
+                   col_markers: str = "black",
                    name: str = "Counts",
                    show_legend: bool = True,
-                   show_init: bool = True) -> PreadVisualizer:
+                   show_init_lines: bool = True,
+                   show_init_markers: bool = True) -> PreadVisualizer:
         pread = self.pread
         t = (None if pread._seq is None or pread.K is None else
              [f"pos = {i} (-(k-1)={i-pread.K+1}, +(k-1)={i+pread.K-1}), count = {c}<br>"
@@ -50,13 +53,14 @@ class PreadVisualizer:
                              y=self.capped_counts,
                              text=t,
                              mode=mode,
+                             marker_size=marker_size,
                              col=col,
                              name=name,
                              show_legend=show_legend,
-                             show_init=_show_init,
+                             show_init=show_init,
                              use_webgl=self.use_webgl)
-             for mode, _show_init in [("lines", show_init),
-                                      ("markers", False)]])
+             for mode, col, show_init in [("lines", col_lines, show_init_lines),
+                                          ("markers", col_markers, show_init_markers)]])
 
     def add_bases(self,
                   col: str = "black",

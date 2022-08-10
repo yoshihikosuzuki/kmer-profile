@@ -16,12 +16,14 @@ class ClassParams:
     seq_fname:    str
     max_count:    int = 100
     read_len:     int = 20000
+    show_hist:    bool = False
+    width:        int = 600
+    height:       int = None
     hist:         RelCounter = field(init=False)
     depths:       Tuple[len(kp.STATES) * (int,)] = field(init=False)
     dthres:       Tuple[(len(kp.STATES) - 1) * (int,)] = field(init=False)
     emodels:      Tuple[len(kp.Ctype) * (kp.ErrorModel,)] = field(init=False)
     cthres:       kp.CountThres = field(init=False)
-
     DR_RATIO:     float = field(init=False)
 
     def __post_init__(self) -> None:
@@ -34,6 +36,19 @@ class ClassParams:
         self.cthres = kp.calc_cthres(self, verbose=False)
 
         # Constants for classification
+        self.DR_RATIO = 1 + kp.N_SIGMA_R * (1 / sqrt(self.depths['D']))
+
+        if self.show_hist:
+            kp.CountHistVisualizer(width=self.width,
+                                   height=self.height,
+                                   relative=True,
+                                   show_legend=False) \
+                .add_trace(self.hist, opacity=1) \
+                .show()
+
+    def set_custom_depths_and_thres(self, depths, dthres):
+        self.depths = depths
+        self.dthres = dthres
         self.DR_RATIO = 1 + kp.N_SIGMA_R * (1 / sqrt(self.depths['D']))
 
 
